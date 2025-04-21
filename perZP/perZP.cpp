@@ -335,15 +335,20 @@ public:
         int sizemax = csbi.dwSize.X;
         int low{}, high;
         int size = this->size();
-        const int background = 160;
+        const int background = 170;
         while (true) {
             high = low + min(sizemax, size);
 
             for (int i = 0; i < 5; i++) {
                 for (int j = low; j < high; j++) {
-                    if (this->at(i, j)) SetConsoleTextAttribute(hConsole, 112);
-                    else SetConsoleTextAttribute(hConsole, background);
-                    cout << ' ';
+                    if (this->at(i, j)) {
+                        SetConsoleTextAttribute(hConsole, 119);
+                        cout << 'O';
+                    }
+                    else {
+                        SetConsoleTextAttribute(hConsole, background);
+                        cout << '_';
+                    }
                     SetConsoleTextAttribute(hConsole, background);
                 }
                 SetConsoleTextAttribute(hConsole, 15);
