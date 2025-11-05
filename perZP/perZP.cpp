@@ -308,6 +308,7 @@ unordered_map<char, vector<vector<bool>>>charToPixelMap
 		   {0, 1, 0, 0, 0}}}
 };
 
+// classe che contiene le istruzioni di disegno
 class instr
 {
 private:
@@ -346,11 +347,11 @@ public:
 
 	void shorten()
 	{
-		int MaxIndex{};
+		int MaxIndex{ -1 };
 		for (int i = 0; i < dimension; ++i)
 			for (size_t j = 0; j < this->size(); ++j)
 				if (this->at(i, j)) MaxIndex = j;
-		this->resize(MaxIndex);
+		this->resize(MaxIndex + 1);
 	}
 	void attach(const instr& other)
 	{
@@ -380,7 +381,7 @@ public:
 		while (true) {
 			high = low + min(sizemax, size);
 
-			for (int i = 0; i < 5; i++) {
+			for (int i = 0; i < this->dimension; i++) {
 				for (int j = low; j < high; j++) {
 					if (this->at(i, j)) {
 						SetConsoleTextAttribute(hConsole, 119);
@@ -412,52 +413,138 @@ public:
 		return _sum;
 	}
 };
-vector<instr> shortcuts;
 vector<string> ShortcutNames;
+unordered_map<int, vector<instr>> shortcuts;
 
-static instr draw(int dim, bool& ExitWith, bool blockCommands = false)
+// converte un quadrato di pixel in instr
+static instr convert_map_to_instr(vector<vector<bool>> square)
 {
-	ExitWith = false;
-	instr grid(dim);
-	GetConsoleScreenBufferInfo(hConsole, &csbi);
-	if (csbi.dwSize.Y <= dim) return instr(0);
-	grid.resize(csbi.dwSize.X);
+	instr map(square.size());
+	map.resize(square[0].size());
+	for (size_t i = 0; i < square.size(); ++i)
+		for (size_t j = 0; j < square[0].size(); ++j)
+			map.at(i, j) = square[i][j];
+	return map;
+}
 
-	// aggiunta di spazio
-	cout << string(dim + 1, '\n');
+// aggiunge lo spazio necessario per disegnare
+static int allocate_rows(int rows)
+{
+	GetConsoleScreenBufferInfo(hConsole, &csbi);
 	auto begin{ csbi.dwCursorPosition };
-	int shiftup{ dim - csbi.dwSize.Y + begin.Y + 2 };
+	cout << string(rows, '\n');
+	
+	int shiftup{ rows - csbi.dwSize.Y + begin.Y + 1 };
 	if (shiftup < 0) shiftup = 0;
 	begin.X = 0;
 	begin.Y -= shiftup;
 	SetConsoleCursorPosition(hConsole, begin);
 
-	// disegno preventivo
+	return shiftup;
+}
+
+// rimuove il cursore dalla griglia
+static void erase_cursor(COORD CursorPos, bool Val)
+{
+	SetConsoleCursorPosition(hConsole, CursorPos);
+	SetConsoleTextAttribute(hConsole, (Val ? 255 : 170));
+	cout << (Val ? 'O' : '_');
+}
+
+// crea una nuova griglia vuota
+static void new_grid(int dim, COORD& end, int gap = 1)
+{
 	SetConsoleTextAttribute(hConsole, 170);
 	for (int i = 0; i < dim; ++i) {
 		cout << string(csbi.dwSize.X, '_');
 		if (i != dim - 1) cout << '\n';
 	}
-	SetConsoleCursorPosition(hConsole, begin);
+
+	SetConsoleCursorPosition(hConsole, end);
 	SetConsoleTextAttribute(hConsole, 68);
-	wcout << L'_';
-	SetConsoleCursorPosition(hConsole, begin);
+	cout << '_';
+	SetConsoleCursorPosition(hConsole, end);
+	end.Y += dim + gap;
+}
+
+// riscrive il titolo della griglia
+static void title_output(COORD line, string output)
+{
+	SetConsoleCursorPosition(hConsole, line);
+	SetConsoleTextAttribute(hConsole, 4);
+	cout << output;
+}
+
+// richiede un comando all'utente
+static string command_input(COORD line, string output)
+{
+	string input;
+	SetConsoleCursorPosition(hConsole, line);
+	SetConsoleTextAttribute(hConsole, 4);
+	cout << output << ": ";
+	SetConsoleTextAttribute(hConsole, 12);
+	while (input.empty()) getline(cin, input);
+	return input;
+}
+
+// adatta una scorciatoia ad una dimensione diversa
+static instr adapte(instr shortcut, int NewDimension)
+{
+	// ...
+}
+
+// funzione di disegno
+static instr draw(int dim, bool& ExitWith, bool saving = false)
+{
+	// ridimensionamento delle scorciatoie per la dimensione data
+	if (!saving) {
+
+		// inserimento del vettore se non c'è di già
+		if (shortcuts.find(dim) == shortcuts.end())
+			shortcuts.insert({ dim, {} });
+
+		// calcolo dimensione da cui copiare
+		int sizemaxindex{}, sizemax{};
+		for (const auto& it : shortcuts) if (sizemax < it.second.size()) {
+			sizemax = it.second.size();
+			sizemaxindex = it.first;
+		}
+
+		// copia e adattamento
+		auto& vect{ shortcuts[sizemaxindex] };
+		if (sizemaxindex != dim)
+			for (size_t i = shortcuts[dim].size(); i < vect.size(); ++i)
+				shortcuts[dim].push_back(adapte(vect[i], dim));
+	}
+
+	// inizio
+	ExitWith = false;
+	instr grid(dim);
+	GetConsoleScreenBufferInfo(hConsole, &csbi);
+	auto begin{ csbi.dwCursorPosition };
+	if (csbi.dwSize.Y <= dim + 7) return instr(0);
+	
+	// creazione della griglia di disegno
+	grid.resize(csbi.dwSize.X);
+	begin.X = 0;
+	begin.Y -= allocate_rows(dim + 3);
+	auto end{ begin };
+	end.Y += dim + 1;
+	auto CursorPosition{ begin };
+	new_grid(dim, begin);
 
 	// loop dell'input
 	int row{}, column{};
 	bool CurrentValue{ false };
-	COORD CursorPosition{ begin }, end{ begin };
-	end.Y += dim + 1;
 	while (true) if (_kbhit())
 	{
-		char c = _getch();
-		c = tolower(c);
+		char c = tolower(_getch());
 		CurrentValue = grid.at(row, column);
 
 		// uscita
 		if (c == '\r') {
-			SetConsoleTextAttribute(hConsole, (CurrentValue ? 255 : 170));
-			wcout << (CurrentValue ? L'O' : L'_');
+			erase_cursor(CursorPosition, CurrentValue);
+			SetConsoleTextAttribute(hConsole, 15);
 			SetConsoleCursorPosition(hConsole, end);
 			break;
 		}
@@ -466,86 +553,65 @@ static instr draw(int dim, bool& ExitWith, bool blockCommands = false)
 		switch (c)
 		{
 			// inserimento di un pixel
-		case ' ':
+		case ' ': {
 			grid.at(row, column) = true;
 			SetConsoleTextAttribute(hConsole, 204);
 			cout << 'O';
 			SetConsoleCursorPosition(hConsole, CursorPosition);
 			break;
+		}
 
 			// cancellazione di un pixel
-		case '\b':
+		case '\b': {
 			grid.at(row, column) = false;
 			SetConsoleTextAttribute(hConsole, 68);
 			cout << '_';
 			SetConsoleCursorPosition(hConsole, CursorPosition);
 			break;
+		}
 
 			// inversione di un pixel
-		case 'c':
+		case 'c': {
 			grid.at(row, column) = !CurrentValue;
 			SetConsoleTextAttribute(hConsole, (CurrentValue ? 68 : 204));
 			cout << (CurrentValue ? '_' : 'O');
 			SetConsoleCursorPosition(hConsole, CursorPosition);
 			break;
+		}
 
 			// movimenti
-
-		case 'w':
+		case 'w': {
 			if (row == 0) break;
 			row--;
-			SetConsoleTextAttribute(hConsole, (CurrentValue ? 255 : 170));
-			cout << (CurrentValue ? 'O' : '_');
+			erase_cursor(CursorPosition, CurrentValue);
 			CursorPosition.Y--;
 			break;
-
-		case 's':
+		}
+		case 's': {
 			if (row == dim - 1) break;
 			row++;
-			SetConsoleTextAttribute(hConsole, (CurrentValue ? 255 : 170));
-			cout << (CurrentValue ? 'O' : '_');
+			erase_cursor(CursorPosition, CurrentValue);
 			CursorPosition.Y++;
 			break;
-
-		case 'a':
+		}
+		case 'a': {
 			if (column == 0) break;
 			column--;
-			SetConsoleTextAttribute(hConsole, (CurrentValue ? 255 : 170));
-			cout << (CurrentValue ? 'O' : '_');
+			erase_cursor(CursorPosition, CurrentValue);
 			CursorPosition.X--;
 			break;
-
+		}
 		case 'd': {
 
 			// movimento
+			int shiftup{};
 			column++;
-			SetConsoleTextAttribute(hConsole, (CurrentValue ? 255 : 170));
-			cout << (CurrentValue ? 'O' : '_');
+			erase_cursor(CursorPosition, CurrentValue);
 
 			// aggiunta di una seconda fascia
-			int shiftup{};
 			if (column % csbi.dwSize.X == 0 and column > 0) {
-
-				// aggiunta dello spazio necessario
-				SetConsoleTextAttribute(hConsole, 15);
-				SetConsoleCursorPosition(hConsole, end);
-				cout << string(dim + 1, '\n');
-				shiftup = dim - csbi.dwSize.Y + end.Y + 2;
-				if (shiftup < 0) shiftup = 0;
-				end.X = 0;
-				end.Y -= shiftup;
-
-				// preparazione del terreno
-				SetConsoleCursorPosition(hConsole, end);
-				SetConsoleTextAttribute(hConsole, 170);
-				for (int i = 0; i < dim; ++i) {
-					cout << string(csbi.dwSize.X, '_');
-					if (i != dim - 1) cout << '\n';
-				}
-				SetConsoleCursorPosition(hConsole, end);
-
-				// aggiornamenti
-				end.Y += dim + 1;
+				allocate_rows(dim + 3);
+				new_grid(dim, end);
 				grid.resize(grid.size() + csbi.dwSize.X);
 				SetConsoleCursorPosition(hConsole, CursorPosition);
 			}
@@ -565,25 +631,36 @@ static instr draw(int dim, bool& ExitWith, bool blockCommands = false)
 
 			// comandi
 		case '/':
-			
-			// input comando
-			string command;
-			SetConsoleCursorPosition(hConsole, end);
-			SetConsoleTextAttribute(hConsole, 4);
-			cout << "Inserisci comando: ";
-			SetConsoleTextAttribute(hConsole, 12);
-			while (command.empty()) getline(cin, command);
+			auto command{ command_input(end, "Inserisci comando") };
 
-			// undo messaggio comando
-			if (command == "void") break;
+			// fine del salvataggio
+			if (command == "resume" and saving) {
+				ExitWith = true;
+				erase_cursor(CursorPosition, CurrentValue);
+				SetConsoleCursorPosition(hConsole, end);
+				grid.shorten();
+				return grid;
+			}
+
+			// undo messaggio comando o filtro comandi in modalità salvataggio
+			if (command == "void" or saving) {
+
+				// cancellazione del comando
+				SetConsoleTextAttribute(hConsole, 15);
+				SetConsoleCursorPosition(hConsole, end);
+				cout << string(csbi.dwSize.X, L' ');
+
+				// reset attributi
+				SetConsoleTextAttribute(hConsole, (CurrentValue ? 255 : 170));
+				SetConsoleCursorPosition(hConsole, CursorPosition);
+				break;
+			}
 
 			// salvataggio di una scorciatoia
-			if (command == "save_once" or command == "save")
+			if (command == "saveone" or command == "save")
 			{
-				// creazione di una nuova griglia
-				SetConsoleCursorPosition(hConsole, CursorPosition);
-				SetConsoleTextAttribute(hConsole, (CurrentValue ? 255 : 170));
-				wcout << (CurrentValue ? L'O' : L'_');
+				// creazione di una griglia di disegno separata
+				erase_cursor(CursorPosition, CurrentValue);
 				SetConsoleCursorPosition(hConsole, end);
 				SetConsoleTextAttribute(hConsole, 15);
 				cout << "\n\n";
@@ -592,32 +669,60 @@ static instr draw(int dim, bool& ExitWith, bool blockCommands = false)
 				// ciclo
 				do {
 					auto shortcut{ draw(dim, ExitVal, true) };
-					end.Y += dim + 2;
-					string name;
+					end.Y += dim + 3;
+					if (ExitVal) break;
 
-					SetConsoleCursorPosition(hConsole, end);
-					SetConsoleTextAttribute(hConsole, 4);
-					cout << "Inserisci nome della scorciatoia: ";
-					SetConsoleTextAttribute(hConsole, 12);
-					while (name.empty()) getline(cin, name);
+					// input comando
+					auto name{
+						command_input(end, "Inserisci il nome della scorciatoia")
+					};
 					cout << '\n';
 
-					shortcuts.push_back(shortcut);
+					// push
+					shortcuts[dim].push_back(shortcut);
 					ShortcutNames.push_back(name);
-				} while (!ExitVal and command == "save");
+				} while (command == "save");
+				// ridisegno
+
+				if (command == "saveone") end.Y += 4;
+
+				// reset dati
+				SetConsoleTextAttribute(hConsole, 15);
+				end.Y -= 2;
+				SetConsoleCursorPosition(hConsole, end);
+
+				// output titolo
+				end.Y -= allocate_rows(dim + 7);
+				cout << "\n\n";
+				title_output(end, "Riprendi il disegno");
+				cout << "\n\n";
+
+				// ripresa della griglia di prima
+				grid.AutoPrint();
+				CursorPosition.Y = end.Y + 2;
+				end.Y += dim + 3;
+				SetConsoleCursorPosition(hConsole, CursorPosition);
 
 				break;
 			}
 
 			// caricamento della scorciatoia
-			cout << "\n\n";
+			cout << '\n';
 			ptrdiff_t index{ -1 };
 			for (size_t i = 0; i < ShortcutNames.size(); ++i)
 				if (command == ShortcutNames[i])
 					index = i;
-			if (index == -1) break;
+			if (index == -1) {
+				SetConsoleTextAttribute(hConsole, 15);
+				SetConsoleCursorPosition(hConsole, end);
+				cout << string(csbi.dwSize.X, L' ');
+
+				SetConsoleTextAttribute(hConsole, (CurrentValue ? 255 : 170));
+				SetConsoleCursorPosition(hConsole, CursorPosition);
+				break;
+			}
 			grid.shorten();
-			grid.attach(shortcuts[index]);
+			grid.attach(shortcuts[dim][index]);
 
 			// ricaricamento della griglia
 			int Size = csbi.dwSize.X;
@@ -629,6 +734,7 @@ static instr draw(int dim, bool& ExitWith, bool blockCommands = false)
 			CursorPosition.Y = end.Y - dim;
 		}
 
+		// ridisegno del cursore
 		if (c == 'w' or c == 's' or c == 'a' or c == 'd') {
 			SetConsoleCursorPosition(hConsole, CursorPosition);
 			SetConsoleTextAttribute(hConsole, (grid.at(row, column) ? 204 : 68));
@@ -641,22 +747,63 @@ static instr draw(int dim, bool& ExitWith, bool blockCommands = false)
 	return grid;
 }
 
+unordered_map<char, string> symbolToNameMap{
+	{ '.' , "dot"                 },
+	{ ',' , "comma"               },
+	{ ';' , "semicolon"           }, 
+	{ ':' , "colon"               },
+	{ '-' , "dash"                },
+	{ '+' , "plus"                },
+	{ '<' , "left_angle_bracket"  },
+	{ '=' , "equal"               },
+	{ '>' , "right_angle_bracket" },
+	{ '!' , "exclamation_mark"    },
+	{ '?' , "question_mark"       },
+	{ '&' , "ampersand"           },
+	{ '#' , "hash"                },
+	{ '%' , "percentage"          },
+	{ '$' , "dollar"              },
+	{ '£' , "pound"               },
+	{ '^' , "caret"               },
+	{ '_' , "underscore"          },
+	{ '\\', "backslash"           },
+	{ '/' , "forwardslash"        },
+	{ '|' , "vertical_bar"        }
+};
 int main()
 {
+	// calcolo preventivo di alcune scorciatoie di default
+	shortcuts.insert({ 5, {} });
+	for (const auto& sq : charToPixelMap) {
+		shortcuts[5].push_back(convert_map_to_instr(sq.second));
+
+		// nome corto
+		auto ch{ sq.first };
+		if (('0' <= ch and ch <= 9) or ('A' <= ch and ch <= 'Z')) {
+			ShortcutNames.push_back(string(1, ch));
+			continue;
+		}
+
+		// nome esteso (simboli)
+		ShortcutNames.push_back(symbolToNameMap[ch]);
+	}
+
 	while (true) 
 	{
 		string word;
-		SetConsoleTextAttribute(hConsole, 4);
-		cout << "Inserisci una stringa da codificare (/ = fine input)\n\n";
-		SetConsoleTextAttribute(hConsole, 15);
-		while (word.empty()) getline(cin, word);
-		cout << '\n';
-		if (word == "/") return 0;
+		if (false) { ///
+			SetConsoleTextAttribute(hConsole, 4);
+			cout << "Inserisci una stringa da codificare (/ = fine input)\n\n";
+			SetConsoleTextAttribute(hConsole, 15);
+			while (word.empty()) getline(cin, word);
+			cout << '\n';
+			if (word == "/") return 0;
+		} ///
 
 		// comandi
-		if (word.at(0) == '/' and word.at(word.size() - 1) != '/')
+		if (true or (word.at(0) == '/' and word.at(word.size() - 1) != '/')) ///
 		{
-			if (word == "/write")
+			if (word == "/write" or true) ///
 			{
 				bool no_use;
 				int dim;
