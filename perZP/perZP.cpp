@@ -326,7 +326,7 @@ private:
 	int dimension;
 	vector<bool>* instructions;
 
-	// costruttori
+	// costruttori e distruttore
 public:
 	instr() : dimension(5)
 	{
@@ -340,6 +340,49 @@ public:
 	{
 		instructions = new vector<bool>[dim];
 		this->resize(size);
+	}
+	instr(const instr& other) : dimension(other.dimension)
+	{
+		instructions = new vector<bool>[this->dimension];
+		for (int i = 0; i < this->dimension; ++i)
+			instructions[i] = other.instructions[i];
+	}
+	instr(instr&& other) noexcept
+		: dimension(other.dimension), instructions(other.instructions)
+	{
+		other.dimension = 0;
+		other.instructions = nullptr;
+	}
+	~instr()
+	{
+		delete[] instructions;
+	}
+
+	// assegnazione
+	instr& operator=(const instr& other)
+	{
+		if (this != &other)
+		{
+			delete[] instructions;
+			this->dimension = other.dimension;
+			instructions = new vector<bool>[dimension];
+			for (int i = 0; i < dimension; ++i)
+				instructions[i] = other.instructions[i];
+		}
+		return *this;
+	}
+	instr& operator=(instr&& other) noexcept
+	{
+		if (this != &other)
+		{
+			delete[] instructions;
+			dimension = other.dimension;
+			instructions = other.instructions;
+
+			other.dimension = 0;
+			other.instructions = nullptr;
+		}
+		return *this;
 	}
 
 	// dimensioni
@@ -428,7 +471,7 @@ public:
 	}
 	
 	// flip
-	void invertf() const
+	void invertf()
 	{
 		if (!this->at(0, 0)) for (int i = 0; i < this->dimension; ++i)
 			for (int j = 0; j < this->size(); ++j)
@@ -497,14 +540,13 @@ static bool is_integer(string str)
 }
 
 // cerca una scorciatoia
-static ptrdiff_t find_shortcut(string name)
+static ptrdiff_t find_shortcut(string name, vector<string>& vect = ShortcutNames)
 {
 	ptrdiff_t index{ -1 };
-	for (ptrdiff_t i = 0; i < ShortcutNames.size(); ++i)
-		if (name == ShortcutNames[i]) {
-			index = i;
-			break;
-		}
+	for (ptrdiff_t i = 0; i < vect.size(); ++i) if (name == vect[i]) {
+		index = i;
+		break;
+	}
 	return index;
 }
 
@@ -720,9 +762,82 @@ static int count_spaces(string str, ptrdiff_t& FirstSpace)
 	return spaces;
 }
 
+// separa gli elenchi formati da parentesi graffe
+static bool extract_parameters(string str, vector<string>& list)
+{
+	int balance{};
+	size_t startIndex;
+	list.clear();
+	for (size_t i = 0; i < str.size(); ++i)
+	{
+		switch (str.at(i))
+		{
+		case '{':
+			startIndex = i;
+			balance++;
+			break;
+		case '}':
+			list.push_back(
+				str.substr(startIndex + 1, i - startIndex - 1)
+			);
+			balance--;
+			break;
+		}
+		if (balance != 0 and balance != 1) return false;
+	}
+	return true;
+}
+
+// decodifica un esadecimale
+static instr decode_hex
+(string word, string& invsum, int dim = -1)
+{
+	// conversione in binario
+	bool do_continue{ false };
+	for (auto c : word) {
+
+		// da carattere a numero
+		int decimal;
+		c = toupper(c);
+		if (isdigit(c)) decimal = c - '0';
+		else decimal = c - 'A' + 10;
+		if (decimal > 15) {
+			do_continue = true;
+			break;
+		}
+
+		// in binario
+		string bin(4, '0');
+		for (int i = 0, binpow = 8; i < 4; ++i, binpow /= 2)
+			if (decimal >= binpow)
+			{
+				decimal -= binpow;
+				bin.at(i) = '1';
+			}
+
+		invsum += bin;
+	}
+	if (do_continue) return instr(0);
+
+	// accorciamento
+	int fix = invsum.size() % dim;
+	invsum.erase(invsum.begin(), invsum.begin() + fix);
+
+	// compilazione della tabella
+	instr binary;
+	int cols = invsum.size() / dim;
+	for (int i = 0; i < dim; ++i) for (int j = 0; j < cols; ++j)
+		binary.push(i,
+			invsum.at(i * cols + j) == '1'
+		);
+
+	return binary;
+}
+
 // funzione di disegno
 static instr draw(
 	int dim,
+	int& global_dim,
 	bool& ReturnedValue,
 	bool& ExitWith,
 	bool saving = false,
@@ -752,7 +867,7 @@ static instr draw(
 	}
 
 	// inizio
-	ExitWith = false;
+	ReturnedValue = ExitWith = false;
 	GetConsoleScreenBufferInfo(hConsole, &csbi);
 	auto begin{ csbi.dwCursorPosition };
 	if (csbi.dwSize.Y <= dim + 7) return instr(0);
@@ -856,14 +971,15 @@ static instr draw(
 			// controllo accessibilità
 			if (Data.empty()) break;
 			auto sc{ Data[Data.size() - 1] };
-			if (grid.truelen() != sc.endx) break;
+			if (max((int)ResistShorting - 1, grid.truelen()) != sc.endx) break;
 			if (grid.size() - sc.startx > csbi.dwSize.X) break;
 
 			// rimozione
 			Data.pop_back();
 			for (int i = 0; i < dim; ++i) for (int j = sc.startx; j <= sc.endx; ++j)
 				grid.at(i, j) = false;
-			if (!Data.empty()) ResistShorting = Data.at(Data.size() - 1).endx;
+			if (!Data.empty()) ResistShorting = Data.at(Data.size() - 1).endx + 1;
+			else ResistShorting = 0;
 
 			// disegno
 			update_grid(grid, end, dim, false);
@@ -1120,9 +1236,17 @@ e' necessario tornare alla schermata principale, continuare?"
 				auto oldsize{ shortcuts[dim][scIndex].size() };
 
 				// modifica della scorciatoia
+				int no_use0;
 				bool no_use1, no_use2;
 				auto NewValue{
-					draw(dim, no_use1, no_use2, true, shortcuts[dim][scIndex])
+					draw(
+						dim,
+						no_use0,
+						no_use1,
+						no_use2,
+						true,
+						shortcuts[dim][scIndex]
+					)
 				};
 				GetConsoleScreenBufferInfo(hConsole, &csbi);
 				end = csbi.dwCursorPosition;
@@ -1171,7 +1295,8 @@ e' necessario tornare alla schermata principale, continuare?"
 
 				// ciclo
 				do {
-					auto shortcut{ draw(dim, No_use, ExitVal, true) };
+					int zero_use;
+					auto shortcut{ draw(dim, zero_use, No_use, ExitVal, true) };
 					GetConsoleScreenBufferInfo(hConsole, &csbi);
 					end = csbi.dwCursorPosition;
 					if (ExitVal) break;
@@ -1269,7 +1394,11 @@ numeri, lettere e underscore\a";
 			// fetch dati
 			if (command == "paste")
 			{
-				int global_dim;
+				// dati che devono essere estratti
+				instr newbase;
+				vector<instr> list;
+				vector<string> scNames;
+				vector<ShortcutInfo> infos;
 
 				// input del codice
 				bool start{ true };
@@ -1278,8 +1407,9 @@ numeri, lettere e underscore\a";
 				{
 					// primo input
 					if (!start) {
-						erase_command(end, end, 0);
-						codes = command_input(end, out);
+						GetConsoleScreenBufferInfo(hConsole, &csbi);
+						codes = command_input(csbi.dwCursorPosition, out);
+						cout << '\n';
 					}
 					start = false;
 					if (codes.empty()) continue;
@@ -1324,6 +1454,7 @@ numeri, lettere e underscore\a";
 					codes.erase(0, sep + 1);
 
 					// controllo dell'esadecimale
+					string __not;
 					if (hexadec.substr(0, 4) != "hex=") {
 						out = "L'esadec non ha il suo contrassegno, riprova";
 						continue;
@@ -1335,12 +1466,182 @@ numeri, lettere e underscore\a";
 							out = "l'esadec non è valido, riprova";
 							continue;
 						}
+					newbase = decode_hex(hexadec, __not, global_dim);
+					if (newbase.empty()) {
+						out = "La griglia e' vuota, riprova";
+						continue;
+					}
 
 					// estrazione delle scorciatoie
+					sep = codes.find('&');
+					if (sep == string::npos) {
+						out = "Il codice non contiene le scorciatoie, riprova";
+						continue;
+					}
+					auto sclist{ codes };
+					sclist.erase(sep);
+					codes.erase(0, sep + 1);
 
+					// controllo delle scorciatoie
+					if (sclist.substr(0, 10) != "shortcuts=") {
+						out = "Le scorciatoie non hanno il contrassegno, riprova";
+						continue;
+					}
+					sclist.erase(0, 10);
+
+					// ottenimento scorciatoie
+					scNames.clear();
+					vector<string> names;
+					extract_parameters(sclist, names);
+					for (const auto& sc : names)
+					{
+						// separazione di nome e contenuto
+						size_t half{ sc.find('/') };
+						if (half == string::npos) {
+							out = "Una scorciatoia non e' valida, riprova";
+							continue;
+						}
+						auto id{ sc };
+						auto Hex{ sc };
+						id.erase(half);
+						Hex.erase(0, half + 1);
+
+						// controllo nome
+						for (const auto& ch : id) if (!isalnum(ch) and ch != '_') {
+							out =
+								"Il nome di una scorciatoia non e' valido, riprova";
+							continue;
+						}
+						
+						// controllo unicità
+						if (find_shortcut(id, scNames) != -1) {
+							out = "Una scorciatoia ha nome doppio, riprova";
+							continue;
+						}
+						scNames.push_back(id);
+
+						// controllo contenuto
+						string _not;
+						for (const auto& ch : Hex)
+							if (!isdigit(ch) and (ch < 'a' or ch > 'f'))
+							{
+								out = "Il contenuto di una scorciatoia non e' ";
+								out += "valido, riprova";
+								continue;
+							}
+						auto last{ decode_hex(Hex, _not, global_dim) };
+						if (last.empty()) {
+							out = "Una scorciatoia e' vuota";
+							continue;
+						}
+						list.push_back(last);
+					}
+					
+					// controllo delle posizioni delle scorciatoie
+					if (codes.find('&') != string::npos) {
+						out = "Il codice contiene troppe informazioni, riprova";
+						continue;
+					}
+					if (codes.substr(0, 5) != "disp=") {
+						out = "Le posizioni non hanno il contrassegno, riprova";
+						continue;
+					}
+					codes.erase(0, 5);
+					
+					// ottenimento posizioni
+					infos.clear();
+					vector<string> positions;
+					bool empty{ codes == "{}" };
+					if (!empty) extract_parameters(codes, positions);
+					if (!empty) for (const auto& pos : positions)
+					{
+						// separazione di nome e dati
+						size_t half{ pos.find('/') };
+						if (half == string::npos) {
+							out = "Una posizione non e' valida, riprova";
+							continue;
+						}
+						auto id{ pos };
+						auto data_{ pos };
+						id.erase(half);
+						data_.erase(0, half + 1);
+
+						// controllo esistenza
+						for (const auto& ch : id)
+							if (find_shortcut(id, scNames) == -1)
+							{
+								out = "Una posizione e' ";
+								out += "di una scorciatoia sconosciuta, riprova";
+								continue;
+							}
+
+						// splicing
+						if (data_.size() < 5) {
+							out = "Una posizione è incorretta, riprova";
+							continue;
+						}
+						vector<string> parts;
+						for (ptrdiff_t i = data_.size() - 2; i >= 0; --i) 
+							if (data_.at(i) == L'/')
+							{
+								parts.push_back(
+									data_.substr(i + 1, data_.size() - i)
+								);
+								data_.erase(i + 1);
+							}
+						if (parts.size() != 3) {
+							out = "Una posizione ha troppi dati, riprova";
+							continue;
+						}
+
+						// controllo numericità
+						for (const auto& part : parts)
+							if (part.size() > 4 or !is_integer(part)) {
+								out = "I dati di una posizione sono incorretti";
+								out += ", riprova";
+								continue;
+							}
+
+						// push
+						ShortcutInfo info(
+							id, 
+							stoi(parts[2]), stoi(parts[1]), stoi(parts[0])
+						);
+						infos.push_back(info);
+
+						// controllo ordine
+						if (info.endx <= info.startx + info.has_space) {
+							out = "Una posizione è intrecciata, riprova";
+							continue;
+						}
+					}
+
+					// controllo ordine crescente tra varie posizioni
+					for (size_t i = 1; i < infos.size(); ++i)
+						if (infos[i - 1].endx >= infos[i].startx)
+						{
+							out = "Ci sono due posizioni sovrapposte, riprova";
+							continue;
+						}
+
+					// controllo sufficienza spazio
+					if (!infos.empty())
+						if (infos.at(infos.size() - 1).endx >= base.size())
+						{
+							out = "La griglia e' troppo corta, riprova";
+							continue;
+						}
+					break;
 				}
-				erase_command(end, end, 0);
-				break;
+
+				// impostazione
+				ShortcutNames = scNames;
+				shortcuts.clear();
+				shortcuts[global_dim] = list;
+				Data = infos;
+				cout << '\n';
+				allocate_rows(global_dim + 7);
+				return newbase;
 			}
 
 			// ricerca della scorciatoia
@@ -1381,7 +1682,7 @@ numeri, lettere e underscore\a";
 			Data.push_back(
 				ShortcutInfo(command, starting - withspace, ending, withspace)
 			);
-			ResistShorting = ending;
+			ResistShorting = ending + 1;
 		}
 
 		// ridisegno del cursore
@@ -1391,50 +1692,6 @@ numeri, lettere e underscore\a";
 
 	grid.shorten(ResistShorting);
 	return grid;
-}
-
-static instr decode_hex(string word, string& invsum, int dim = -1)
-{
-	// conversione in binario
-	bool do_continue{ false };
-	for (auto c : word) {
-
-		// da carattere a numero
-		int decimal;
-		c = toupper(c);
-		if (isdigit(c)) decimal = c - '0';
-		else decimal = c - 'A' + 10;
-		if (decimal > 15) {
-			do_continue = true;
-			break;
-		}
-
-		// in binario
-		string bin(4, '0');
-		for (int i = 0, binpow = 8; i < 4; ++i, binpow /= 2)
-			if (decimal >= binpow)
-			{
-				decimal -= binpow;
-				bin.at(i) = '1';
-			}
-
-		invsum += bin;
-	}
-	if (do_continue) return instr(0);
-
-	// flip se necessario
-	if (invsum.at(0) == '0') for (int i = 0; i < invsum.size(); ++i)
-		invsum.at(i) = (invsum.at(i) == '0' ? '1' : '0');
-
-	// compilazione della tabella
-	instr binary;
-	int rows = invsum.size() / dim;
-	for (int i = 0; i < dim; ++i) for (int j = 0; j < rows; ++j)
-		binary.push(i,
-			invsum.at(i * rows + j) == '1'
-		);
-
-	return binary;
 }
 
 // conversione in esadecimale
@@ -1479,7 +1736,7 @@ static string view_disposition()
 {
 	string output;
 	for (const auto& sc : Data)
-		output += "{" + sc.name + ", "
+		output += "{" + sc.name + ","
 			+ to_string(sc.startx) + "/" + to_string(sc.endx) + "/"
 			+ (sc.has_space ? "1" : "0") + "}";
 	return output;
@@ -1492,7 +1749,7 @@ unordered_map<char, string> symbolToNameMap{
 	{ ':' , "colon"               },
 	{ '-' , "dash"                },
 	{ '+' , "plus"                },
-	{ ' ' , "space"               },
+	{ ' ' , "sp"                  },
 	{ '<' , "left_angle_bracket"  },
 	{ '=' , "equal"               },
 	{ '>' , "right_angle_bracket" },
@@ -1550,11 +1807,11 @@ int main()
 			if (word == "/write" or true) ///
 			{
 				string Input;
-				int dim;
-				bool ret, enable;
+				int dim, new_dim = -1;
+				bool ret, enable, pasting{ false };
 				do {
 					cout << "Quale dimensione vuoi usare per la scrittura?\n";
-					cin >> Input;
+					getline(cin, Input);
 					cout << '\n';
 
 					if (Input.size() <= 2)
@@ -1563,8 +1820,12 @@ int main()
 
 				} while (dim != 3 and dim != 5 and dim != 7
 					and dim != 11 and dim != 13 and dim != 17);
-
-				binaryWord = draw(dim, ret, enable);
+			
+				// inizio del disegno
+			retry:
+				binaryWord = pasting ?
+					draw(dim, new_dim, ret, enable, false, binaryWord)
+					: draw(dim, new_dim, ret, enable);
 				if (binaryWord.extent() == 0) {
 					SetConsoleTextAttribute(hConsole, 64);
 					cout << "La console e' troppo piccola, errore!\a";
@@ -1572,7 +1833,15 @@ int main()
 					cout << "\n\n";
 					continue;
 				}
-			
+				
+				// è stato incollato qualcosa
+				if (new_dim != -1) {
+					dim = new_dim;
+					new_dim = -1;
+					pasting = true;
+					goto retry;
+				}
+
 				// liste
 				if (enable) {
 					SetConsoleTextAttribute(hConsole, 9);
