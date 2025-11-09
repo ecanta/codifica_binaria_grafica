@@ -565,6 +565,7 @@ static instr convert_map_to_instr(vector<vector<bool>> square)
 static int allocate_rows(int rows)
 {
 	GetConsoleScreenBufferInfo(hConsole, &csbi);
+	SetConsoleTextAttribute(hConsole, 15);
 	auto begin{ csbi.dwCursorPosition };
 	cout << string(rows, '\n');
 	
@@ -574,6 +575,7 @@ static int allocate_rows(int rows)
 	begin.Y -= shiftup;
 	SetConsoleCursorPosition(hConsole, begin);
 
+	SetConsoleTextAttribute(hConsole, csbi.wAttributes);
 	return shiftup;
 }
 
@@ -610,7 +612,7 @@ static void erase_command(COORD line, COORD CursorPos, bool Val, bool repo = tru
 }
 
 // crea una nuova griglia vuota
-static void new_grid(int dim, COORD& end, int gap = 1)
+static void new_grid(int dim, int col, COORD& end, int gap = 1)
 {
 	SetConsoleCursorPosition(hConsole, end);
 	SetConsoleTextAttribute(hConsole, 170);
@@ -619,10 +621,12 @@ static void new_grid(int dim, COORD& end, int gap = 1)
 		if (i != dim - 1) cout << '\n';
 	}
 
-	SetConsoleCursorPosition(hConsole, end);
+	auto pos{ end };
+	pos.Y += col;
+	SetConsoleCursorPosition(hConsole, pos);
 	SetConsoleTextAttribute(hConsole, 68);
 	cout << '_';
-	SetConsoleCursorPosition(hConsole, end);
+	SetConsoleCursorPosition(hConsole, pos);
 	end.Y += dim + gap;
 }
 
@@ -870,7 +874,7 @@ static instr draw(
 	ReturnedValue = ExitWith = false;
 	GetConsoleScreenBufferInfo(hConsole, &csbi);
 	auto begin{ csbi.dwCursorPosition };
-	if (csbi.dwSize.Y <= dim + 7) return instr(0);
+	if (csbi.dwSize.Y <= 2 * dim + 7) return instr(0);
 	
 	// creazione della griglia di disegno
 	if (base.extent() != dim) base = instr(dim);
@@ -892,7 +896,7 @@ static instr draw(
 		cout << '_';
 		SetConsoleCursorPosition(hConsole, CursorPosition);
 	}
-	else new_grid(dim, begin);
+	else new_grid(dim, 0, begin);
 
 	// loop dell'input
 	size_t ResistShorting{};
@@ -1029,17 +1033,18 @@ static instr draw(
 
 			// aggiunta di una seconda fascia
 			if (column % csbi.dwSize.X == 0 and column > 0) {
-				allocate_rows(dim + 3);
-				new_grid(dim, end);
+				shiftup = allocate_rows(2 * dim + 3);
+
+				// aggiornamento posizione
+				end.Y -= shiftup;
+				CursorPosition.X = 0;
+				CursorPosition.Y -= shiftup;
+				CursorPosition.Y += dim + 1;
+
+				// creazione griglia
+				new_grid(dim, row, end);
 				grid.resize(grid.size() + csbi.dwSize.X);
 				SetConsoleCursorPosition(hConsole, CursorPosition);
-			}
-
-			// aggiornamento posizione speciale
-			if (column % csbi.dwSize.X == 0 and column > 0) {
-				CursorPosition.X = 0;
-				CursorPosition.Y += dim + 1;
-				CursorPosition.Y -= shiftup;
 				break;
 			}
 
@@ -1657,7 +1662,10 @@ numeri, lettere e underscore\a";
 			int Size = csbi.dwSize.X;
 			int starting = grid.size() - Size;
 			int ending = starting;
-			grid.shorten(ResistShorting);
+			
+			// calcolo nuova griglia
+			grid.shorten(max((short)ResistShorting, CursorPosition.X));
+			CursorPosition.X = grid.size();
 			bool withspace{ CommandArgs != "nospace" and grid.size() > 0 };
 			if (withspace) {
 				grid.resize(grid.size() + 1);
@@ -1676,6 +1684,7 @@ numeri, lettere e underscore\a";
 			update_grid(grid, end, dim, CursorPosition.X != original);
 			column = grid.size() - csbi.dwSize.X + CursorPosition.X;
 			CursorPosition.Y = end.Y - dim - 1;
+			row = 0;
 			draw_cursor(CursorPosition, grid.at(row, column));
 			
 			// aggiunta al vettore informazioni
