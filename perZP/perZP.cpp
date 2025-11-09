@@ -481,25 +481,33 @@ public:
 	// visualizzazione grafica
 	void AutoPrint(int low = 0, const int& background = 170) const
 	{
+		// inizio
 		GetConsoleScreenBufferInfo(hConsole, &csbi);
 		int sizemax = csbi.dwSize.X, high, size = this->size();
+		SetConsoleTextAttribute(hConsole, 255);
+
+		bool on{ true };
 		while (true) {
 			high = low + min(sizemax, size);
 
 			for (int i = 0; i < this->dimension; ++i) {
 				for (int j = low; j < high; ++j) {
 					if (this->at(i, j)) {
-						SetConsoleTextAttribute(hConsole, 255);
+						if (!on) SetConsoleTextAttribute(hConsole, 255);
 						cout << 'O';
 					}
 					else {
-						SetConsoleTextAttribute(hConsole, background);
+						if (on) SetConsoleTextAttribute(hConsole, background);
 						cout << '_';
 					}
-					SetConsoleTextAttribute(hConsole, background);
+					on = this->at(i, j);
 				}
+
+				// a capo
 				SetConsoleTextAttribute(hConsole, 15);
 				cout << '\n';
+				SetConsoleTextAttribute(hConsole, 255);
+				on = true;
 			}
 			cout << '\n';
 			size -= sizemax;
@@ -643,8 +651,9 @@ static void update_grid
 (instr& grid, COORD& end, int dim, bool linechange, bool redraw = false)
 {
 	// scorrimento
+	SetConsoleCursorPosition(hConsole, end);
 	if (linechange) {
-		end.Y -= allocate_rows(dim + 1);
+		end.Y -= allocate_rows(dim + 3);
 		end.Y += dim + 1;
 	}
 
@@ -674,18 +683,25 @@ static void update_grid
 }
 
 // ridisegna la griglia originale
-static void back_to_original_grid
-(instr grid, COORD& CursorPosition, COORD& line, int dim)
+static void back_to_original_grid(
+	instr grid,
+	COORD& CursorPosition,
+	COORD& line,
+	int dim,
+	bool suppress = false
+)
 {
 	// reset dati
 	SetConsoleTextAttribute(hConsole, 15);
-	line.Y -= 2;
+	if (!suppress) line.Y -= 2;
 	SetConsoleCursorPosition(hConsole, line);
 
 	// output titolo
 	line.Y -= allocate_rows(dim + 7);
-	cout << "\n\n";
-	title_output(line, "Riprendi il disegno");
+	if (!suppress) {
+		cout << "\n\n";
+		title_output(line, "Riprendi il disegno");
+	}
 	cout << "\n\n";
 
 	// ripresa della griglia di prima
@@ -828,7 +844,7 @@ static instr decode_hex
 	invsum.erase(invsum.begin(), invsum.begin() + fix);
 
 	// compilazione della tabella
-	instr binary;
+	instr binary(dim);
 	int cols = invsum.size() / dim;
 	for (int i = 0; i < dim; ++i) for (int j = 0; j < cols; ++j)
 		binary.push(i,
@@ -874,7 +890,7 @@ static instr draw(
 	ReturnedValue = ExitWith = false;
 	GetConsoleScreenBufferInfo(hConsole, &csbi);
 	auto begin{ csbi.dwCursorPosition };
-	if (csbi.dwSize.Y <= 2 * dim + 7) return instr(0);
+	if (csbi.dwSize.Y <= 2 * dim + 4) return instr(0);
 	
 	// creazione della griglia di disegno
 	if (base.extent() != dim) base = instr(dim);
@@ -1079,13 +1095,26 @@ static instr draw(
 			}
 
 			// fine del salvataggio
-			if (command == "resume" and !grid.empty() and saving)
+			if (command == "resume" and base.extent() == 0
+				and !grid.empty() and saving)
 			{
 				ExitWith = true;
 				erase_cursor(CursorPosition, CurrentValue);
 				SetConsoleCursorPosition(hConsole, end);
 				grid.shorten();
 				return grid;
+			}
+
+			// cancellazione griglia
+			if (command == "clear")
+			{
+				grid.resize(csbi.dwSize.X);
+				for (int i = 0; i < dim; ++i)
+					for (size_t j = 0; j < grid.size(); ++j)
+						grid.at(i, j) = false;
+				back_to_original_grid(grid, CursorPosition, end, dim, true);
+				erase_command(end, CursorPosition, CurrentValue);
+				break;
 			}
 
 			// undo messaggio comando o filtro comandi in modalità salvataggio
@@ -1340,8 +1369,10 @@ numeri, lettere e underscore\a";
 
 					// push
 					cout << '\n';
-					shortcuts[dim].push_back(shortcut);
-					ShortcutNames.push_back(name);
+					if (shortcut.size() < csbi.dwSize.X) {
+						shortcuts[dim].push_back(shortcut);
+						ShortcutNames.push_back(name);
+					}
 				} while (command == "savemany");
 
 				// ridisegno
@@ -1410,6 +1441,7 @@ numeri, lettere e underscore\a";
 				string codes{ CommandArgs }, out{ "Inserisci i dati esportati"};
 				while (true)
 				{
+				redo:
 					// primo input
 					if (!start) {
 						GetConsoleScreenBufferInfo(hConsole, &csbi);
@@ -1417,13 +1449,13 @@ numeri, lettere e underscore\a";
 						cout << '\n';
 					}
 					start = false;
-					if (codes.empty()) continue;
+					if (codes.empty()) goto redo;
 
 					// estrazione della dimensione
 					auto sep{ codes.find('&') };
 					if (sep == string::npos) {
 						out = "Il codice non contiene la dimensione, riprova";
-						continue;
+						goto redo;
 					}
 					auto Dim{ codes };
 					Dim.erase(sep);
@@ -1432,12 +1464,12 @@ numeri, lettere e underscore\a";
 					// controllo della dimensione
 					if (Dim.substr(0, 4) != "dim=") {
 						out = "La dimensione non ha il suo contrassegno, riprova";
-						continue;
+						goto redo;
 					}
 					Dim.erase(0, 4);
 					if (!is_integer(Dim) or Dim.size() > 2) {
 						out = "La dimensione non e' valida, riprova";
-						continue;
+						goto redo;
 					}
 					global_dim = stoi(Dim);
 					if (global_dim != 3 and global_dim != 5 and global_dim != 7
@@ -1445,14 +1477,14 @@ numeri, lettere e underscore\a";
 						and global_dim != 17)
 					{
 						out = "La dimensione non e' supportata, riprova";
-						continue;
+						goto redo;
 					}
 
 					// estrazione dell'esadecimale
 					sep = codes.find('&');
 					if (sep == string::npos) {
 						out = "Il codice non contiene l'esadecimale, riprova";
-						continue;
+						goto redo;
 					}
 					auto hexadec{ codes };
 					hexadec.erase(sep);
@@ -1462,26 +1494,26 @@ numeri, lettere e underscore\a";
 					string __not;
 					if (hexadec.substr(0, 4) != "hex=") {
 						out = "L'esadec non ha il suo contrassegno, riprova";
-						continue;
+						goto redo;
 					}
 					hexadec.erase(0, 4);
 					for (const auto& ch : hexadec)
 						if (!isdigit(ch) and (ch < 'a' or ch > 'f'))
 						{
 							out = "l'esadec non è valido, riprova";
-							continue;
+							goto redo;
 						}
 					newbase = decode_hex(hexadec, __not, global_dim);
 					if (newbase.empty()) {
 						out = "La griglia e' vuota, riprova";
-						continue;
+						goto redo;
 					}
 
 					// estrazione delle scorciatoie
 					sep = codes.find('&');
 					if (sep == string::npos) {
 						out = "Il codice non contiene le scorciatoie, riprova";
-						continue;
+						goto redo;
 					}
 					auto sclist{ codes };
 					sclist.erase(sep);
@@ -1490,7 +1522,7 @@ numeri, lettere e underscore\a";
 					// controllo delle scorciatoie
 					if (sclist.substr(0, 10) != "shortcuts=") {
 						out = "Le scorciatoie non hanno il contrassegno, riprova";
-						continue;
+						goto redo;
 					}
 					sclist.erase(0, 10);
 
@@ -1504,7 +1536,7 @@ numeri, lettere e underscore\a";
 						size_t half{ sc.find('/') };
 						if (half == string::npos) {
 							out = "Una scorciatoia non e' valida, riprova";
-							continue;
+							goto redo;
 						}
 						auto id{ sc };
 						auto Hex{ sc };
@@ -1515,13 +1547,13 @@ numeri, lettere e underscore\a";
 						for (const auto& ch : id) if (!isalnum(ch) and ch != '_') {
 							out =
 								"Il nome di una scorciatoia non e' valido, riprova";
-							continue;
+							goto redo;
 						}
 						
 						// controllo unicità
 						if (find_shortcut(id, scNames) != -1) {
 							out = "Una scorciatoia ha nome doppio, riprova";
-							continue;
+							goto redo;
 						}
 						scNames.push_back(id);
 
@@ -1532,24 +1564,20 @@ numeri, lettere e underscore\a";
 							{
 								out = "Il contenuto di una scorciatoia non e' ";
 								out += "valido, riprova";
-								continue;
+								goto redo;
 							}
 						auto last{ decode_hex(Hex, _not, global_dim) };
-						if (last.empty()) {
-							out = "Una scorciatoia e' vuota";
-							continue;
-						}
 						list.push_back(last);
 					}
 					
 					// controllo delle posizioni delle scorciatoie
 					if (codes.find('&') != string::npos) {
 						out = "Il codice contiene troppe informazioni, riprova";
-						continue;
+						goto redo;
 					}
 					if (codes.substr(0, 5) != "disp=") {
 						out = "Le posizioni non hanno il contrassegno, riprova";
-						continue;
+						goto redo;
 					}
 					codes.erase(0, 5);
 					
@@ -1561,10 +1589,10 @@ numeri, lettere e underscore\a";
 					if (!empty) for (const auto& pos : positions)
 					{
 						// separazione di nome e dati
-						size_t half{ pos.find('/') };
+						size_t half{ pos.find(',') };
 						if (half == string::npos) {
 							out = "Una posizione non e' valida, riprova";
-							continue;
+							goto redo;
 						}
 						auto id{ pos };
 						auto data_{ pos };
@@ -1577,26 +1605,27 @@ numeri, lettere e underscore\a";
 							{
 								out = "Una posizione e' ";
 								out += "di una scorciatoia sconosciuta, riprova";
-								continue;
+								goto redo;
 							}
 
 						// splicing
 						if (data_.size() < 5) {
 							out = "Una posizione è incorretta, riprova";
-							continue;
+							goto redo;
 						}
 						vector<string> parts;
-						for (ptrdiff_t i = data_.size() - 2; i >= 0; --i) 
+						for (ptrdiff_t i = data_.size() - 2; i >= 0; --i)
 							if (data_.at(i) == L'/')
 							{
 								parts.push_back(
 									data_.substr(i + 1, data_.size() - i)
 								);
-								data_.erase(i + 1);
+								data_.erase(i);
 							}
+						parts.push_back(data_);
 						if (parts.size() != 3) {
 							out = "Una posizione ha troppi dati, riprova";
-							continue;
+							goto redo;
 						}
 
 						// controllo numericità
@@ -1604,7 +1633,7 @@ numeri, lettere e underscore\a";
 							if (part.size() > 4 or !is_integer(part)) {
 								out = "I dati di una posizione sono incorretti";
 								out += ", riprova";
-								continue;
+								goto redo;
 							}
 
 						// push
@@ -1616,8 +1645,8 @@ numeri, lettere e underscore\a";
 
 						// controllo ordine
 						if (info.endx <= info.startx + info.has_space) {
-							out = "Una posizione è intrecciata, riprova";
-							continue;
+							out = "Una posizione e' intrecciata, riprova";
+							goto redo;
 						}
 					}
 
@@ -1626,15 +1655,15 @@ numeri, lettere e underscore\a";
 						if (infos[i - 1].endx >= infos[i].startx)
 						{
 							out = "Ci sono due posizioni sovrapposte, riprova";
-							continue;
+							goto redo;
 						}
 
 					// controllo sufficienza spazio
 					if (!infos.empty())
-						if (infos.at(infos.size() - 1).endx >= base.size())
+						if (infos.at(infos.size() - 1).endx >= newbase.size())
 						{
 							out = "La griglia e' troppo corta, riprova";
-							continue;
+							goto redo;
 						}
 					break;
 				}
@@ -1660,12 +1689,13 @@ numeri, lettere e underscore\a";
 			// scrittura
 		write_shortcut:
 			int Size = csbi.dwSize.X;
+			auto portions{ grid.size() / Size };
 			int starting = grid.size() - Size;
 			int ending = starting;
 			
 			// calcolo nuova griglia
 			grid.shorten(max((short)ResistShorting, CursorPosition.X));
-			CursorPosition.X = grid.size();
+			CursorPosition.X = grid.size() % Size;
 			bool withspace{ CommandArgs != "nospace" and grid.size() > 0 };
 			if (withspace) {
 				grid.resize(grid.size() + 1);
@@ -1676,12 +1706,11 @@ numeri, lettere e underscore\a";
 			// correzione coordinate
 			starting += CursorPosition.X;
 			CursorPosition.X += shortcuts[dim][ShortcutIndex].size();
-			auto original{ CursorPosition.X };
-			CursorPosition.X %= Size;
 			ending += CursorPosition.X - 1;
+			CursorPosition.X %= Size;
 
 			// disegno
-			update_grid(grid, end, dim, CursorPosition.X != original);
+			update_grid(grid, end, dim, ceil(double(ending + 1) / Size) > portions);
 			column = grid.size() - csbi.dwSize.X + CursorPosition.X;
 			CursorPosition.Y = end.Y - dim - 1;
 			row = 0;
