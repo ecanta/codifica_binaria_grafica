@@ -509,7 +509,9 @@ public:
 				SetConsoleTextAttribute(hConsole, 255);
 				on = true;
 			}
+			SetConsoleTextAttribute(hConsole, 15);
 			cout << '\n';
+			SetConsoleTextAttribute(hConsole, 255);
 			size -= sizemax;
 			low += sizemax;
 			if (size <= 0 or low == this->size()) break;
@@ -808,9 +810,46 @@ static bool extract_parameters(string str, vector<string>& list)
 	return true;
 }
 
+// calcola i numeri primi
+vector<bool> is_prime;
+vector<int> primes;
+static void calculate_prime_numbers(int max)
+{
+	// inizio
+	is_prime.resize(max + 1, true);
+	const int SQUARE{ (int)sqrt(max) + 2 };
+
+	// impostazione tabella
+	for (int p = 2; p < SQUARE; ++p) {
+		if (!is_prime[p]) continue;
+		for (int i = p * p; i <= max; i += p) is_prime[i] = false;
+	}
+
+	// estrazione numeri primi
+	for (int p = 2; p < max + 1; ++p)
+		if (is_prime[p]) primes.push_back(p);
+}
+
+// approssima un numero per eccesso ad un valore primo
+static int prime_approx(int val)
+{
+	int approx;
+	size_t guess{};
+	for (size_t i = 0; i < primes.size(); i += 15) if (primes[i] >= val)
+	{
+		guess = i > 15 ? i - 15 : 0;
+		break;
+	}
+	for (size_t i = guess; i < primes.size(); ++i) if (primes[i] >= val)
+	{
+		approx = primes[i];
+		break;
+	}
+	return approx;
+}
+
 // decodifica un esadecimale
-static instr decode_hex
-(string word, string& invsum, int dim = -1)
+static vector<instr> decode_hex(string word, string& invsum, int dim = -1)
 {
 	// conversione in binario
 	bool do_continue{ false };
@@ -837,21 +876,53 @@ static instr decode_hex
 
 		invsum += bin;
 	}
-	if (do_continue) return instr(0);
+	if (do_continue) return {};
 
-	// accorciamento
-	int fix = invsum.size() % dim;
-	invsum.erase(invsum.begin(), invsum.begin() + fix);
+	vector<int> likely;
+	if (dim == -1)
+	{
+		// calcolo della prima cifra significativa
+		int maxrest{ 4 };
+		for (int i = 1; i <= 4; ++i) if (invsum.at(i - 1) == '1') {
+			maxrest = i;
+			break;
+		}
 
-	// compilazione della tabella
-	instr binary(dim);
-	int cols = invsum.size() / dim;
-	for (int i = 0; i < dim; ++i) for (int j = 0; j < cols; ++j)
-		binary.push(i,
-			invsum.at(i * cols + j) == '1'
+		// ricerca della dimensione giusta
+		const vector<int> valid_dims{ 3, 5, 7, 11, 13, 17 };
+		for (const auto& attempt : valid_dims) {
+			int mod = invsum.size() % attempt;
+			if (mod > maxrest) continue;
+
+			// esclusioni
+			int lenght = invsum.size() / attempt;
+			if (prime_approx(lenght) != lenght or lenght <= 2) continue;
+			if (lenght < attempt) continue;
+
+			likely.push_back(attempt);
+		}
+	}
+	else likely = { dim };
+
+	// calcolo di ogni possibile decodifica
+	vector<instr> bruteforced;
+	for (const auto& _dim : likely) {
+
+		// accorciamento
+		int fix = invsum.size() % _dim;
+		invsum.erase(invsum.begin(), invsum.begin() + fix);
+
+		// compilazione della tabella
+		instr binary(_dim);
+		int cols = invsum.size() / _dim;
+		for (int i = 0; i < _dim; ++i) for (int j = 0; j < cols; ++j) binary.push(
+			i, invsum.at(i * cols + j) == '1'
 		);
 
-	return binary;
+		bruteforced.push_back(binary);
+	}
+
+	return bruteforced;
 }
 
 // funzione di disegno
@@ -1113,6 +1184,7 @@ static instr draw(
 					for (size_t j = 0; j < grid.size(); ++j)
 						grid.at(i, j) = false;
 				back_to_original_grid(grid, CursorPosition, end, dim, true);
+				column = row = 0;
 				erase_command(end, CursorPosition, CurrentValue);
 				break;
 			}
@@ -1438,7 +1510,7 @@ numeri, lettere e underscore\a";
 
 				// input del codice
 				bool start{ true };
-				string codes{ CommandArgs }, out{ "Inserisci i dati esportati"};
+				string codes{ CommandArgs }, out{ "Inserisci i dati esportati" };
 				while (true)
 				{
 				redo:
@@ -1446,6 +1518,7 @@ numeri, lettere e underscore\a";
 					if (!start) {
 						GetConsoleScreenBufferInfo(hConsole, &csbi);
 						codes = command_input(csbi.dwCursorPosition, out);
+						if (out != "Inserisci i dati esportati") cout << '\a';
 						cout << '\n';
 					}
 					start = false;
@@ -1490,24 +1563,34 @@ numeri, lettere e underscore\a";
 					hexadec.erase(sep);
 					codes.erase(0, sep + 1);
 
-					// controllo dell'esadecimale
+					// controllo contrassegno
 					string __not;
 					if (hexadec.substr(0, 4) != "hex=") {
 						out = "L'esadec non ha il suo contrassegno, riprova";
 						goto redo;
 					}
+
 					hexadec.erase(0, 4);
-					for (const auto& ch : hexadec)
-						if (!isdigit(ch) and (ch < 'a' or ch > 'f'))
-						{
-							out = "l'esadec non è valido, riprova";
+					if (hexadec != "{}") {
+					
+						// controllo dell'esadecimale
+						for (const auto& ch : hexadec)
+							if (!isdigit(ch) and (ch < 'a' or ch > 'f'))
+							{
+								out = "l'esadec non è valido, riprova";
+								goto redo;
+							}
+						newbase = decode_hex(hexadec, __not, global_dim)[0];
+
+						// griglia vuota ma sbagliata
+						if (newbase.empty()) {
+							out = "La griglia e' vuota, riprova";
 							goto redo;
 						}
-					newbase = decode_hex(hexadec, __not, global_dim);
-					if (newbase.empty()) {
-						out = "La griglia e' vuota, riprova";
-						goto redo;
 					}
+
+					// griglia vuota e giusta
+					else newbase = instr(global_dim);
 
 					// estrazione delle scorciatoie
 					sep = codes.find('&');
@@ -1566,7 +1649,7 @@ numeri, lettere e underscore\a";
 								out += "valido, riprova";
 								goto redo;
 							}
-						auto last{ decode_hex(Hex, _not, global_dim) };
+						auto last{ decode_hex(Hex, _not, global_dim)[0] };
 						list.push_back(last);
 					}
 					
@@ -1696,6 +1779,8 @@ numeri, lettere e underscore\a";
 			// calcolo nuova griglia
 			grid.shorten(max((short)ResistShorting, CursorPosition.X));
 			CursorPosition.X = grid.size() % Size;
+			if (CursorPosition.X == 0 and portions > 1)
+				CursorPosition.X = Size;
 			bool withspace{ CommandArgs != "nospace" and grid.size() > 0 };
 			if (withspace) {
 				grid.resize(grid.size() + 1);
@@ -1733,11 +1818,27 @@ numeri, lettere e underscore\a";
 }
 
 // conversione in esadecimale
-static string hex(instr binary, string& sum)
+static string hex(instr binary, string& sum, bool truthy)
 {
+	// calcolo lunghezza prima
+	int oldsize = binary.size(), newsize{ oldsize };
+	if (!truthy) newsize = prime_approx(oldsize);
+
+	// allungamento della matrice
+	binary.resize(newsize);
+	oldsize += 2;
+	if (newsize > oldsize) {
+
+		// riempimento con un pattern a diagonali
+		for (int i = 0; i < binary.extent(); ++i)
+			for (size_t j = oldsize; j < newsize; ++j)
+				if ((i + j - oldsize) % 4 == 0)
+					binary.at(i, j) = true;
+	}
+
+	// conversione
 	string hexa;
 	sum = binary.sum();
-
 	for (int i = sum.size() - 1; i >= 0; i -= 4) {
 		auto temp{ sum };
 		stringstream stream;
@@ -1764,8 +1865,8 @@ static string view_shortcuts(int dim)
 	size_t size{ shortcuts[dim].size() };
 	string output, no_use;
 	for (size_t i = 0; i < size; ++i)
-		output +=
-			'{' + ShortcutNames[i] + '/' + hex(shortcuts[dim][i], no_use) + '}';
+		output += '{' + ShortcutNames[i] + '/'
+			+ hex(shortcuts[dim][i], no_use, true) + '}';
 	return output;
 }
 
@@ -1806,6 +1907,9 @@ unordered_map<char, string> symbolToNameMap{
 };
 int main()
 {
+	// calcolo dei numeri primi
+	calculate_prime_numbers(500'000);
+
 	// calcolo dei dati predefiniti, alias e scorciatoie
 	for (int i = 0; i < 26; ++i) Aliases[i] = string(1, i + 'a');
 	shortcuts.insert({ 5, {} });
@@ -1825,116 +1929,155 @@ int main()
 		ShortcutNames.push_back(symbolToNameMap[ch]);
 	}
 
+	// output di inizio programma
+	SetConsoleTextAttribute(hConsole, 3);
+	cout << "CODIFICA BINARIA GRAFICA\n";
+	cout << "Questo programma permette di codificare e decodificare messaggi\n";
+	cout << "inserendoli in una griglia e poi calcolando l'esadecimale dei\n";
+	cout << "pixel messi di fila\n\n";
+	SetConsoleTextAttribute(hConsole, 6);
+	cout << "Per codificare un messaggio di testo lo si scriva\n";
+	cout << "Per decodificare un esadecimale lo si inserisca tra due caratteri /\n";
+	cout << "Per accedere all'interfaccia di disegno prima della codifica\n";
+	cout << "si scriva l'altezza della griglia (numero primo <= 17)";
+	cout << " preceduto da /\n";
+	cout << "Per elencare i comandi dell'interfaccia digitare /help li'\n\n";
+
 	while (true) 
 	{
-		// output di inizio programma
 		string word;
 		instr binaryWord;
-		if (false) { ///
-			SetConsoleTextAttribute(hConsole, 4);
-			cout << "Inserisci una stringa da codificare (/ = fine input)\n\n";
-			SetConsoleTextAttribute(hConsole, 15);
-			while (word.empty()) getline(cin, word);
-			cout << '\n';
-			if (word == "/") return 0;
-		} ///
+
+		// output inizale
+		SetConsoleTextAttribute(hConsole, 4);
+		cout << "Inserisci una stringa da codificare (\\ = fine input)\n\n";
+		SetConsoleTextAttribute(hConsole, 15);
+		while (word.empty()) getline(cin, word);
+		cout << '\n';
+		if (word == "\\") return 0;
 
 		// comandi
-		if (true or (word.at(0) == '/' and word.at(word.size() - 1) != '/')) ///
+		if (word.at(0) == '/' and word.at(word.size() - 1) != '/')
 		{
-			if (word == "/write" or true) ///
+			// chiarimento
+			if (word == "/help") {
+				SetConsoleTextAttribute(hConsole, 9);
+				cout << "Il comando help deve essere digitato dall'interfaccia";
+				cout << " di disegno\n\n";
+				SetConsoleTextAttribute(hConsole, 15);
+				continue;
+			}
+
+			// variabili iniziali
+			string Input{ word };
+			Input.erase(0, 1);
+			int dim, new_dim = -1;
+			bool ret, enable, pasting{ false };
+
+			// controllo dimensione inserita
+			if (Input.empty()) dim = 1;
+			else if (Input.size() <= 2)
+				dim = is_integer(Input) ? stoi(Input) : 1;
+			else dim = 1;
+
+			// caso di errore
+			if (dim != 3 and dim != 5 and dim != 7
+				and dim != 11 and dim != 13 and dim != 17)
 			{
-				string Input;
-				int dim, new_dim = -1;
-				bool ret, enable, pasting{ false };
-				do {
-					cout << "Quale dimensione vuoi usare per la scrittura?\n";
-					getline(cin, Input);
-					cout << '\n';
-
-					if (Input.size() <= 2)
-						dim = is_integer(Input) ? stoi(Input) : 1;
-					else dim = 1;
-
-				} while (dim != 3 and dim != 5 and dim != 7
-					and dim != 11 and dim != 13 and dim != 17);
+				SetConsoleTextAttribute(hConsole, 64);
+				cout << "La dimensione inserita e' sbagliata\a";
+				SetConsoleTextAttribute(hConsole, 15);
+				cout << "\n\n";
+				continue;
+			}
 			
-				// inizio del disegno
-			retry:
-				binaryWord = pasting ?
-					draw(dim, new_dim, ret, enable, false, binaryWord)
-					: draw(dim, new_dim, ret, enable);
-				if (binaryWord.extent() == 0) {
-					SetConsoleTextAttribute(hConsole, 64);
-					cout << "La console e' troppo piccola, errore!\a";
-					SetConsoleTextAttribute(hConsole, 15);
-					cout << "\n\n";
-					continue;
-				}
+			// notifica di input corretto
+			SetConsoleTextAttribute(hConsole, 4);
+			cout << "Dimensione valida, accesso all'interfaccia di disegno...\n\n";
+			SetConsoleTextAttribute(hConsole, 15);
+
+			// inizio del disegno
+		retry:
+			binaryWord = pasting ?
+				draw(dim, new_dim, ret, enable, false, binaryWord)
+				: draw(dim, new_dim, ret, enable);
+			if (binaryWord.extent() == 0) {
+				SetConsoleTextAttribute(hConsole, 64);
+				cout << "La console e' troppo piccola, errore!\a";
+				SetConsoleTextAttribute(hConsole, 15);
+				cout << "\n\n";
+				continue;
+			}
 				
-				// è stato incollato qualcosa
-				if (new_dim != -1) {
-					dim = new_dim;
-					new_dim = -1;
-					pasting = true;
-					goto retry;
-				}
+			// è stato incollato qualcosa
+			if (new_dim != -1) {
+				dim = new_dim;
+				new_dim = -1;
+				pasting = true;
+				goto retry;
+			}
 
-				// liste
-				if (enable) {
-					SetConsoleTextAttribute(hConsole, 9);
+			// liste
+			if (enable) {
+				SetConsoleTextAttribute(hConsole, 9);
 
-					// lista dei comandi
-					if (ret) {
-						cout << "Elenco dei comandi: \n";
-						cout << "/void: non fa niente\n";
-						cout << "/list_shortcuts: elenca tutte le scorciatoie\n";
-						cout << "/help: elenca tutti i comandi\n";
-						cout << "/save: abilita il salvataggio di";
-						cout << " una scorciatoia\n";
-						cout << "/savemany: permette di salvare piu' scorciatoie";
-						cout << " di fila senza dover usare /save tante volte\n";
-						cout << "per fermare quest'operazione si usa /resume\n";
-						cout << "/alias [shortcut] [key]: associa a una";
-						cout << " scorciatoia un tasto alfanumerico\n";
-						cout << "/rename [from] [to]: rinomina una scorciatoia\n";
-						cout << "/edit [shortcut]: modifica una scorciatoia\n";
-						cout << "/horizontal [amount]:";
-						cout << " disegna una linea orizzontale\n";
-						cout << "/rubber [amount]:";
-						cout << " cancella una linea orizzontale\n";
-						cout << "/erase_col: rimuove la colonna corrente\n";
-						cout << "/export: trascrive la griglia";
-						cout << " in un formato copiabile\n";
-						cout << "/paste [code]: carica tutti i dati esportati\n";
-						cout << "/[shortcut]: utilizza la scorciatoia\n";
-						cout << "/[shortcut] nospace: utilizza la scorciatoia";
-						cout << " ma senza lo spazio prima di essa\n\n";
-						SetConsoleTextAttribute(hConsole, 15);
-						continue;
-					}
-
-					// lista delle scorciatoie
-					cout << "Elenco delle scorciatoie: \n";
-					for (const auto& name : ShortcutNames) cout << name << ' ';
-					cout << "\n\n";
-					SetConsoleTextAttribute(hConsole, 15);
-					continue;
-				}
-
-				// esportazione
+				// lista dei comandi
 				if (ret) {
-					string _not;
-					SetConsoleTextAttribute(hConsole, 10);
-					cout << "Export:=\n";
-					cout << "dim=" << dim;
-					cout << "&hex=" << hex(binaryWord, _not);
-					cout << "&shortcuts=" << view_shortcuts(dim);
-					cout << "&disp=" << view_disposition();
-					cout << "\n\n";
+					cout << "Elenco dei comandi: \n";
+					cout << "/void: non fa niente\n";
+					cout << "/list_shortcuts: elenca tutte le scorciatoie\n";
+					cout << "/help: elenca tutti i comandi\n";
+					cout << "/save: abilita il salvataggio di";
+					cout << " una scorciatoia\n";
+					cout << "/savemany: permette di salvare piu' scorciatoie";
+					cout << " di fila senza dover usare /save tante volte\n";
+					cout << "per fermare quest'operazione si usa /resume\n";
+					cout << "/alias [shortcut] [key]: associa a una";
+					cout << " scorciatoia un tasto alfanumerico\n";
+					cout << "/rename [from] [to]: rinomina una scorciatoia\n";
+					cout << "/edit [shortcut]: modifica una scorciatoia\n";
+					cout << "/horizontal [amount]:";
+					cout << " disegna una linea orizzontale\n";
+					cout << "/rubber [amount]:";
+					cout << " cancella una linea orizzontale\n";
+					cout << "/erase_col: rimuove la colonna corrente\n";
+					cout << "/export: trascrive la griglia";
+					cout << " in un formato copiabile\n";
+					cout << "/paste [code]: carica tutti i dati esportati\n";
+					cout << "/[shortcut]: utilizza la scorciatoia\n";
+					cout << "/[shortcut] nospace: utilizza la scorciatoia";
+					cout << " ma senza lo spazio prima di essa\n\n";
 					SetConsoleTextAttribute(hConsole, 15);
 					continue;
 				}
+
+				// lista delle scorciatoie
+				cout << "Elenco delle scorciatoie: \n";
+				for (const auto& name : ShortcutNames) cout << name << ' ';
+				cout << "\n\n";
+				SetConsoleTextAttribute(hConsole, 15);
+				continue;
+			}
+
+			// esportazione
+			if (ret) {
+				string _not;
+				SetConsoleTextAttribute(hConsole, 10);
+				cout << "Export:=\n";
+				cout << "dim=" << dim;
+				cout << "&hex=";
+
+				auto hexa{ hex(binaryWord, _not, true) };
+				cout << (hexa.empty() ? "{}" : hexa);
+				cout << "&shortcuts=" << view_shortcuts(dim);
+				cout << "&disp=";
+
+				auto disp{ view_disposition() };
+				cout << (disp.empty() ? "{}" : disp);
+				cout << "\n\n";
+
+				SetConsoleTextAttribute(hConsole, 15);
+				continue;
 			}
 
 			if (binaryWord.empty()) continue;
@@ -1942,24 +2085,40 @@ int main()
 		}
 
 		// decodifica dell'esadecimale
-		if (word.at(0) == '/') {
+		if (word.at(0) == '/' and word.at(word.size() - 1) == '/')
+		{
 			// calcoli
+			string invsum;
 			word.pop_back();
 			word.erase(0, 1);
-			string invsum;
-			auto binary{ decode_hex(word, invsum, 5) };
+			auto binary{ decode_hex(word, invsum) };
+
+			// errore
+			if (binary.empty()) {
+				SetConsoleTextAttribute(hConsole, 64);
+				cout << "NON CORRETTO!!\a";
+				SetConsoleTextAttribute(hConsole, 64);
+				cout << "\n\n";
+				continue;
+			}
 
 			// output codice binario
 			SetConsoleTextAttribute(hConsole, 4);
-			cout << "codifica in 0 e 1:\n\n";
+			cout << "Codifica in 0 e 1:\n\n";
 			SetConsoleTextAttribute(hConsole, 15);
 			cout << invsum << "\n\n";
 
 			// visualizzazione finale grafica
 			SetConsoleTextAttribute(hConsole, 4);
-			cout << "messaggio:\n\n";
-			SetConsoleTextAttribute(hConsole, 15);
-			binary.AutoPrint();
+			if (binary.size() == 1) cout << "Messaggio:\n\n";
+			for (size_t i = 0; i < binary.size(); ++i) {
+
+				SetConsoleTextAttribute(hConsole, 12);
+				if (binary.size() != 1) cout << "Possibilita' " << i + 1 << ":\n\n";
+				SetConsoleTextAttribute(hConsole, 15);
+
+				binary[i].AutoPrint();
+			}
 			continue;
 		}
 		// codifica
@@ -1979,7 +2138,7 @@ int main()
 
 		// visualizzazione
 		SetConsoleTextAttribute(hConsole, 4);
-		cout << "codifica in 0 e 1 grafica:\n\n";
+		cout << "Codifica in 0 e 1 grafica:\n\n";
 		SetConsoleTextAttribute(hConsole, 15);
 		binaryWord.AutoPrint();
 		
@@ -1987,15 +2146,15 @@ int main()
 
 		// output binario
 		string sum;
-		auto hexa{ hex(binaryWord, sum) };
+		auto hexa{ hex(binaryWord, sum, false) };
 		SetConsoleTextAttribute(hConsole, 4);
-		cout << "codifica in 0 e 1:\n\n";
+		cout << "Codifica in 0 e 1:\n\n";
 		SetConsoleTextAttribute(hConsole, 15);
 		cout << sum << "\n\n";
 
 		// output esadecimale
 		SetConsoleTextAttribute(hConsole, 4);
-		cout << "esadecimale:\n\n";
+		cout << "Esadecimale:\n\n";
 		SetConsoleTextAttribute(hConsole, 15);
 		cout << '/' << hexa << "/\n\n";
 	}
