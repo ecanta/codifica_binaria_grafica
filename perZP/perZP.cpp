@@ -1941,7 +1941,7 @@ int main()
 	cout << "Per codificare un messaggio di testo lo si scriva\n";
 	cout << "Per decodificare un esadecimale lo si inserisca tra due caratteri /\n";
 	cout << "Per accedere all'interfaccia di disegno prima della codifica\n";
-	cout << "si scriva l'altezza della griglia (numero primo <= 17)";
+	cout << "si scriva l'altezza della griglia (numero primo dispari <= 17)";
 	cout << " preceduto da /\n";
 	cout << "Per elencare i comandi dell'interfaccia digitare /help li'\n\n";
 
