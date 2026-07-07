@@ -1931,7 +1931,9 @@ int main()
 
 	// output di inizio programma
 	SetConsoleTextAttribute(hConsole, 3);
-	cout << "CODIFICA BINARIA GRAFICA\n";
+	cout << "/============================================================/\n";
+	cout << "#                  CODIFICA BINARIA GRAFICA                  #\n";
+	cout << "/============================================================/\n\n";
 	cout << "Questo programma permette di codificare e decodificare messaggi\n";
 	cout << "inserendoli in una griglia e poi calcolando l'esadecimale dei\n";
 	cout << "pixel messi di fila\n\n";
@@ -1950,7 +1952,7 @@ int main()
 
 		// output inizale
 		SetConsoleTextAttribute(hConsole, 4);
-		cout << "Inserisci una stringa da codificare (\\ = fine input)\n\n";
+		cout << "Inserisci una stringa da codificare (\"\\\" = fine programma)\n\n";
 		SetConsoleTextAttribute(hConsole, 15);
 		while (word.empty()) getline(cin, word);
 		cout << '\n';
@@ -1994,6 +1996,20 @@ int main()
 			// notifica di input corretto
 			SetConsoleTextAttribute(hConsole, 4);
 			cout << "Dimensione valida, accesso all'interfaccia di disegno...\n\n";
+			SetConsoleTextAttribute(hConsole, 10);
+			cout << "Per disegnare una lettera da scorciatoia, ";
+			cout << "premere il tasto corrispondente, con Bloc Maiusc non attivo\n";
+			cout << "Per cancellare una lettera da scorciatoia, ";
+			cout << "si prema CTRL + Backspace\n";
+			cout << "Per colorare un pixel, premere spazio, per decolorarlo ";
+			cout << "premere backspace, per cambiarne il colore premere \'C\'\n";
+			cout << "Per spostare il cursore, ";
+			cout << "usare i tasti WASD con Bloc Maiusc attivo\n";
+			cout << "Per digitare un comando, premere \'/\'\n\n";
+			SetConsoleTextAttribute(hConsole, 2);
+			cout << "ATTENZIONE: spostandosi fuori dalla griglia con il cursore, ";
+			cout << "verra' creata una nuova porzione di griglia,\n";
+			cout << "e quella precedente diventera' inaccessibile\n\n";
 			SetConsoleTextAttribute(hConsole, 15);
 
 			// inizio del disegno
