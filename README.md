@@ -23,7 +23,7 @@ Windows per funzionare correttamente.
 + Durante la codifica automatica di una stringa di testo (non tramite disegno manuale), il testo viene sempre
   interpretato **senza distinzione tra maiuscole e minuscole**
 + Se la stringa da codificare contiene un carattere non presente tra quelli supportati, questo viene semplicemente
-  rappresentato come uno spazio vuoto nella griglia, senza generare errori
+  rappresentato come un underscore (`_`) nella griglia, senza generare errori
 + Ricostruzione dell'immagine a partire da una stringa esadecimale, con supporto a **decodifiche multiple** quando la dimensione
   della griglia non è specificata (il programma prova tutte le dimensioni compatibili)
 + **Interfaccia di disegno interattiva**, accessibile scrivendo `/` seguito dall'altezza della griglia (un numero primo tra
@@ -62,11 +62,18 @@ Windows per funzionare correttamente.
 
 + **Adattamento automatico delle scorciatoie**: passando a una dimensione di griglia diversa, tutte le scorciatoie già
   disegnate vengono riscalate automaticamente
+
 + Uso dei **numeri primi dispari** come dimensioni valide della griglia (`3, 5, 7, 11, 13, 17`, limitati perché una griglia troppo
-  alta non entrerebbe comunque nella finestra del terminale): una lunghezza totale di bitstream, se fattorizzata per
-  un'altezza prima, dà un'unica scomposizione possibile in righe/colonne, così la decodifica risulta il più possibile
-  univoca. Quando la stessa lunghezza è compatibile con più altezze prime candidate, il programma calcola **tutte** le
-  decodifiche possibili e le mostra una per una, lasciando all'utente scegliere quella corretta
+  alta non entrerebbe comunque nella finestra del terminale): la lunghezza del bitstream, fattorizzata per un'altezza
+  prima, dà un'unica scomposizione possibile in righe/colonne, così la decodifica risulta il più possibile univoca.
+  Tuttavia, poiché ogni carattere esadecimale corrisponde a 4 bit e i bit più significativi nulli di un gruppo non
+  vengono mostrati esplicitamente, la lunghezza reale del bitstream può discostarsi da quella ricavata direttamente
+  dall'esadecimale fino a 3 bit in meno (cioè, a partire da una lunghezza `n`, quella vera può essere `n`, `n+1`,
+  `n+2` o `n+3`). Tra queste quattro lunghezze candidate, sono considerate valide solo quelle scomponibili come
+  prodotto di due numeri primi, di cui almeno uno minore o uguale a 17 (l'altezza della griglia): quando più di una
+  soddisfa questa condizione, il programma calcola **tutte** le decodifiche possibili e le mostra una per una,
+  lasciando all'utente scegliere quella corretta
+  
 + Funziona anche su terminali che non supportano colori ANSI complessi, rappresentando comunque l'immagine con
   caratteri ASCII (`O` per acceso, `_` per spento)
 
@@ -85,8 +92,45 @@ Windows per funzionare correttamente.
 Il comando `/export`, disponibile dall'interfaccia di disegno, produce una stringa nel formato:
 
 ```
-dim=11&hex=1c1dffdc1dff07f1c1c7ff83bffb83bfe0fe3838fff077ff7877ff7ff7077ffe0e0e0f8ee0ee0ee0ee01c9c1c1f9dc1dc1dc9dfe3bb8383bbb83b83bbb8fe7ff07073f7077077ff0fffbe0e0e3ee0ee0efbe00fe3dffdc3dffdffde3dfff83bffb83bfe0fe383bfe7077ff7077fc1fc7077fc&shortcuts={a/07f0fe7ffe0fffffffffe0fc1f83f07}{b/1ff3fe7ffe0fffffe7ffe0fffffe7fc}{c/07fcfffffe01c0380700e01ffcff9ff}{d/1ff3fe7ffe0fc1f83f07e0fffffe7fc}{e/1ffffffffe01fe3fe7f8e01ffffffff}{f/1ffffffffe01fe3fe7f8e01c0380700}{g/07fcfffffe01c3f8ff0fe0fffcff9ff}{h/1c1f83f07e0fffffffffe0fc1f83f07}{i/1ffffffff0e01c0380700e1ffffffff}{j/007c0f80f00e01c03e07e0fffcfe1fc}{k/1c1f83f0fe39fe3f87f8e39c3f83f07}{l/1c0380700e01c0380700e01ffffffff}{m/1c1f83f8ffbffffbbf27e0fc1f83f07}{n/1c1f83f87f8ff9fbbf3fe3fc3f83f07}{o/07f0fe7ffe0fc1f83f07e0fffcfe1fc}{p/1ff3fe7ffe0fffffe7f8e01c0380700}{q/07f0fe7ffe0fc1f83f0fe3fffcff9ff}{r/1ff3fe7ffe0fffffe7f8ee1ce38e71c}{s/07fcfffffe01fe0fe0ff00fffffe7fc}{t/1ffffffff0e01c0380700e01c038070}{u/1c1f83f07e0fc1f83f07e0fffcfe1fc}{v/1c1f83f07e0fc1f83f8f3b83e038070}{w/1c1f83f07e0fc9fbbffffbfe3f83f07}{x/1c1f83f8f3b83e0380f83b9e3f83f07}{y/1c1f83f8f3b83e0380700e01c038070}{z/1ffffffff0380e0380e0381ffffffff}{0/07f0fe7ffeefddfbbf77eefffcfe1fc}{1/01c0380f03e03c0380700e1ffffffff}{2/07f0fe7ffe0f83c0e0380e1ffffffff}{3/07f0fe7ffe0f8fc3e63fe0fffcfe1fc}{4/1c738e71ce39ffffffff0380700e01c}{5/1ffffffffe01fe3fe7ff00fffffe7fc}{6/07f0fe7f8e01fe3fe7ffe0fffcfe1fc}{7/1ffffffff00e03c0e0380e01c038070}{8/07f0fe7ffe0fffcfe7ffe0fffcfe1fc}{9/07f0fe7ffe0fffcff8ff00e3fcfe1fc}{dot/000000000000000000000000200e01c}{comma/000000000000000000080380e038070}{semicolon/000000008038020000080380e038070}{colon/0000000080380200000803802000000}{dash/0000000000003e0fe0f800000000000}{plus/0000000200e03e0fe0f80e008000000}{sp/0000000000000000000000000000000}{vertical_bar/0700e01c0380700e01c0380700e01c0}{left_angle_bracket/001c0380f0380e03803803803c03807}{equal/0000000f83f83e0000f83f83e000000}{right_angle_bracket/1c0380780380380380e0381e0380700}{exclamation_mark/01c0380700e01c03802000008038070}{question_mark/07f0fe7ffe0f83c0e0380e01c038070}{ampersand/07f0fe7f8e01fe0fe7fce39ffcfb9f7}{pound/07fcff9ff381f83f87e0381ffffffff}{hash/0770ee7fffffffcee7fffffffcee1dc}{percentage/1c1f83e0f0380e0380e0381e0f83f07}{dollar/07fcfffffe39fe0f80f30efffffe7fc}{caret/01c0380f83b9e3f83e0300000000000}{underscore/00000000000000000000001ffffffff}{backslash/1c03807803803803803803803c03807}{forwardslash/001c0380f0380e0380e0381e0380700}&disp={w,0/10/0}{i,11/22/1}{n,23/34/1}{d,35/46/1}{o,47/58/1}{w,59/70/1}{s,71/82/1}
+dim=11&
+
+hex=1c1dffdc1dff07f1c1c7ff83bffb83bfe0fe3838fff077ff7877ff7ff7077ffe0e0e0f8ee0ee
+0ee0ee01c9c1c1f9dc1dc1dc9dfe3bb8383bbb83b83bbb8fe7ff07073f7077077ff0fffbe0e0e3ee
+0ee0efbe00fe3dffdc3dffdffde3dfff83bffb83bfe0fe383bfe7077ff7077fc1fc7077fc&
+
+shortcuts={a/07f0fe7ffe0fffffffffe0fc1f83f07}{b/1ff3fe7ffe0fffffe7ffe0fffffe7fc}
+{c/07fcfffffe01c0380700e01ffcff9ff}{d/1ff3fe7ffe0fc1f83f07e0fffffe7fc}
+{e/1ffffffffe01fe3fe7f8e01ffffffff}{f/1ffffffffe01fe3fe7f8e01c0380700}
+{g/07fcfffffe01c3f8ff0fe0fffcff9ff}{h/1c1f83f07e0fffffffffe0fc1f83f07}
+{i/1ffffffff0e01c0380700e1ffffffff}{j/007c0f80f00e01c03e07e0fffcfe1fc}
+{k/1c1f83f0fe39fe3f87f8e39c3f83f07}{l/1c0380700e01c0380700e01ffffffff}
+{m/1c1f83f8ffbffffbbf27e0fc1f83f07}{n/1c1f83f87f8ff9fbbf3fe3fc3f83f07}
+{o/07f0fe7ffe0fc1f83f07e0fffcfe1fc}{p/1ff3fe7ffe0fffffe7f8e01c0380700}
+{q/07f0fe7ffe0fc1f83f0fe3fffcff9ff}{r/1ff3fe7ffe0fffffe7f8ee1ce38e71c}
+{s/07fcfffffe01fe0fe0ff00fffffe7fc}{t/1ffffffff0e01c0380700e01c038070}
+{u/1c1f83f07e0fc1f83f07e0fffcfe1fc}{v/1c1f83f07e0fc1f83f8f3b83e038070}
+{w/1c1f83f07e0fc9fbbffffbfe3f83f07}{x/1c1f83f8f3b83e0380f83b9e3f83f07}
+{y/1c1f83f8f3b83e0380700e01c038070}{z/1ffffffff0380e0380e0381ffffffff}
+{0/07f0fe7ffeefddfbbf77eefffcfe1fc}{1/01c0380f03e03c0380700e1ffffffff}
+{2/07f0fe7ffe0f83c0e0380e1ffffffff}{3/07f0fe7ffe0f8fc3e63fe0fffcfe1fc}
+{4/1c738e71ce39ffffffff0380700e01c}{5/1ffffffffe01fe3fe7ff00fffffe7fc}
+{6/07f0fe7f8e01fe3fe7ffe0fffcfe1fc}{7/1ffffffff00e03c0e0380e01c038070}
+{8/07f0fe7ffe0fffcfe7ffe0fffcfe1fc}{9/07f0fe7ffe0fffcff8ff00e3fcfe1fc}
+{dot/000000000000000000000000200e01c}{comma/000000000000000000080380e038070}{semicolon/000000008038020000080380e038070}{colon/0000000080380200000803802000000}{dash/0000000000003e0fe0f800000000000}{plus/0000000200e03e0fe0f80e008000000}
+{sp/0000000000000000000000000000000}{vertical_bar/0700e01c0380700e01c0380700e01c0}{left_angle_bracket/001c0380f0380e03803803803c03807}
+{equal/0000000f83f83e0000f83f83e000000}
+{right_angle_bracket/1c0380780380380380e0381e0380700}
+{exclamation_mark/01c0380700e01c03802000008038070}
+{question_mark/07f0fe7ffe0f83c0e0380e01c038070}
+{ampersand/07f0fe7f8e01fe0fe7fce39ffcfb9f7}
+{pound/07fcff9ff381f83f87e0381ffffffff}{hash/0770ee7fffffffcee7fffffffcee1dc}
+{percentage/1c1f83e0f0380e0380e0381e0f83f07}{dollar/07fcfffffe39fe0f80f30efffffe7fc}{caret/01c0380f83b9e3f83e0300000000000}{underscore/00000000000000000000001ffffffff}{backslash/1c03807803803803803803803c03807}
+{forwardslash/001c0380f0380e0380e0381e0380700}&
+
+disp={w,0/10/0}{i,11/22/1}{n,23/34/1}{d,35/46/1}{o,47/58/1}{w,59/70/1}{s,71/82/1}
 ```
+
+(Aggiunti spazi per migliorare la leggibilità, la stringa esportata è completamente priva di essi).
 
 Analizzando questo esempio, il codice esportato si divide in quattro parti, separate da `&`:
 

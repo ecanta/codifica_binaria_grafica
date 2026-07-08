@@ -285,11 +285,6 @@ unordered_map<char, vector<vector<bool>>>charToPixelMap
 		   {0, 1, 1, 0, 0},
 		   {0, 0, 1, 0, 1},
 		   {1, 1, 1, 1, 0}}},
-	{'£', {{0, 1, 1, 1, 1},
-		   {0, 1, 0, 0, 0},
-		   {1, 1, 1, 0, 0},
-		   {0, 1, 0, 0, 0},
-		   {1, 1, 1, 1, 1}}},
 	{'^', {{0, 0, 1, 0, 0},
 		   {0, 1, 0, 1, 0},
 		   {1, 0, 0, 0, 1},
@@ -314,7 +309,47 @@ unordered_map<char, vector<vector<bool>>>charToPixelMap
 		   {0, 1, 0, 0, 0},
 		   {0, 1, 0, 0, 0},
 		   {0, 1, 0, 0, 0},
-		   {0, 1, 0, 0, 0}}}
+		   {0, 1, 0, 0, 0}}},
+	{'@', {{0, 1, 1, 0, 0},
+		   {1, 0, 0, 1, 0},
+		   {1, 0, 1, 0, 0},
+		   {1, 0, 0, 0, 1},
+		   {0, 1, 1, 1, 0}}},
+	{'*', {{1, 0, 1, 0, 1},
+		   {0, 1, 1, 1, 0},
+		   {1, 1, 1, 1, 1},
+		   {0, 1, 1, 1, 0},
+		   {1, 0, 1, 0, 1}}},
+	{'(', {{0, 0, 1, 1, 0},
+		   {0, 1, 0, 0, 0},
+		   {1, 0, 0, 0, 0},
+		   {0, 1, 0, 0, 0},
+		   {0, 0, 1, 1, 0}}},
+	{')', {{0, 1, 1, 0, 0},
+		   {0, 0, 0, 1, 0},
+		   {0, 0, 0, 0, 1},
+		   {0, 0, 0, 1, 0},
+		   {0, 1, 1, 0, 0}}},
+	{'[', {{0, 1, 1, 0, 0},
+		   {0, 1, 0, 0, 0},
+		   {0, 1, 0, 0, 0},
+		   {0, 1, 0, 0, 0},
+		   {0, 1, 1, 0, 0}}},
+	{']', {{0, 0, 1, 1, 0},
+		   {0, 0, 0, 1, 0},
+		   {0, 0, 0, 1, 0},
+		   {0, 0, 0, 1, 0},
+		   {0, 0, 1, 1, 0}}},
+	{'{', {{0, 0, 1, 1, 0},
+		   {0, 1, 0, 0, 0},
+		   {1, 0, 1, 0, 0},
+		   {0, 1, 0, 0, 0},
+		   {0, 0, 1, 1, 0}}},
+	{'}', {{0, 1, 1, 0, 0},
+		   {0, 0, 0, 1, 0},
+		   {0, 0, 1, 0, 1},
+		   {0, 0, 0, 1, 0},
+		   {0, 1, 1, 0, 0}}}
 };
 string Aliases[26];
 
@@ -611,7 +646,7 @@ static void erase_command(COORD line, COORD CursorPos, bool Val, bool repo = tru
 {
 	SetConsoleTextAttribute(hConsole, 15);
 	SetConsoleCursorPosition(hConsole, line);
-	cout << string(csbi.dwSize.X, L' ');
+	cout << string(csbi.dwSize.X, ' ');
 	
 	if (repo) {
 		SetConsoleTextAttribute(hConsole, (Val ? 255 : 170));
@@ -774,7 +809,7 @@ static int count_spaces(string str, ptrdiff_t& FirstSpace)
 	bool first{ true };
 	int spaces{};
 	FirstSpace = -1;
-	for (size_t i = 0; i < str.size(); ++i) if (str.at(i) == L' ') {
+	for (size_t i = 0; i < str.size(); ++i) if (str.at(i) == ' ') {
 		spaces++;
 		if (first) {
 			first = false;
@@ -1159,7 +1194,7 @@ static instr draw(
 			{
 				int spaces{};
 				for (; spaces < CommandArgs.size(); ++spaces)
-					if (CommandArgs.at(CommandArgs.size() - spaces - 1) != L' ')
+					if (CommandArgs.at(CommandArgs.size() - spaces - 1) != ' ')
 						break;
 				if (!CommandArgs.empty() and spaces > 0)
 					CommandArgs.erase(CommandArgs.size() - spaces);
@@ -1417,7 +1452,7 @@ e' necessario tornare alla schermata principale, continuare?"
 
 						// controllo caratteri
 						bool wrong{ false };
-						for (const auto& ch : name) if (!isalnum(ch) and ch != L'_')
+						for (const auto& ch : name) if (!isalnum(ch) and ch != '_')
 						{
 							wrong = true;
 							break;
@@ -1698,7 +1733,7 @@ numeri, lettere e underscore\a";
 						}
 						vector<string> parts;
 						for (ptrdiff_t i = data_.size() - 2; i >= 0; --i)
-							if (data_.at(i) == L'/')
+							if (data_.at(i) == '/')
 							{
 								parts.push_back(
 									data_.substr(i + 1, data_.size() - i)
@@ -1882,28 +1917,35 @@ static string view_disposition()
 }
 
 unordered_map<char, string> symbolToNameMap{
-	{ '.' , "dot"                 },
-	{ ',' , "comma"               },
-	{ ';' , "semicolon"           }, 
-	{ ':' , "colon"               },
-	{ '-' , "dash"                },
-	{ '+' , "plus"                },
-	{ ' ' , "sp"                  },
-	{ '<' , "left_angle_bracket"  },
-	{ '=' , "equal"               },
-	{ '>' , "right_angle_bracket" },
-	{ '!' , "exclamation_mark"    },
-	{ '?' , "question_mark"       },
-	{ '&' , "ampersand"           },
-	{ '#' , "hash"                },
-	{ '%' , "percentage"          },
-	{ '$' , "dollar"              },
-	{ '£' , "pound"               },
-	{ '^' , "caret"               },
-	{ '_' , "underscore"          },
-	{ '\\', "backslash"           },
-	{ '/' , "forwardslash"        },
-	{ '|' , "vertical_bar"        }
+	{ '.' , "dot"                  },
+	{ ',' , "comma"                },
+	{ ';' , "semicolon"            }, 
+	{ ':' , "colon"                },
+	{ '-' , "dash"                 },
+	{ '+' , "plus"                 },
+	{ ' ' , "sp"                   },
+	{ '<' , "left_angle_bracket"   },
+	{ '=' , "equal"                },
+	{ '>' , "right_angle_bracket"  },
+	{ '!' , "exclamation_mark"     },
+	{ '?' , "question_mark"        },
+	{ '&' , "ampersand"            },
+	{ '#' , "hash"                 },
+	{ '%' , "percentage"           },
+	{ '$' , "dollar"               },
+	{ '^' , "caret"                },
+	{ '_' , "underscore"           },
+	{ '\\', "backslash"            },
+	{ '/' , "forwardslash"         },
+	{ '|' , "vertical_bar"         },
+	{ '@' , "at"                   },
+	{ '*' , "asterisk"             },
+	{ '(' , "left_par"             },
+	{ ')' , "right_par"            },
+	{ '[' , "left_square_bracket"  },
+	{ ']' , "right_square_bracket" },
+	{ '{' , "left_curly_bracket"   },
+	{ '}' , "right_curly_bracket"  }
 };
 int main()
 {
@@ -1961,76 +2003,76 @@ int main()
 		// comandi
 		if (word.at(0) == '/' and word.at(word.size() - 1) != '/')
 		{
-			// chiarimento
-			if (word == "/help") {
-				SetConsoleTextAttribute(hConsole, 9);
-				cout << "Il comando help deve essere digitato dall'interfaccia";
-				cout << " di disegno\n\n";
-				SetConsoleTextAttribute(hConsole, 15);
-				continue;
-			}
-
-			// variabili iniziali
-			string Input{ word };
-			Input.erase(0, 1);
+			// quei comandi che non richiedono disegno
 			int dim, new_dim = -1;
 			bool ret, enable, pasting{ false };
+			if (word == "/help" or word == "/list_shortcuts") {
+				enable = true;
+				ret = word == "/help";
+			}
 
-			// controllo dimensione inserita
-			if (Input.empty()) dim = 1;
-			else if (Input.size() <= 2)
-				dim = is_integer(Input) ? stoi(Input) : 1;
-			else dim = 1;
-
-			// caso di errore
-			if (dim != 3 and dim != 5 and dim != 7
-				and dim != 11 and dim != 13 and dim != 17)
+			// disegno effettivo con controllo
+			else
 			{
-				SetConsoleTextAttribute(hConsole, 64);
-				cout << "La dimensione inserita e' sbagliata\a";
-				SetConsoleTextAttribute(hConsole, 15);
-				cout << "\n\n";
-				continue;
-			}
-			
-			// notifica di input corretto
-			SetConsoleTextAttribute(hConsole, 4);
-			cout << "Dimensione valida, accesso all'interfaccia di disegno...\n\n";
-			SetConsoleTextAttribute(hConsole, 10);
-			cout << "Per disegnare una lettera da scorciatoia, ";
-			cout << "premere il tasto corrispondente, con Bloc Maiusc non attivo\n";
-			cout << "Per cancellare una lettera da scorciatoia, ";
-			cout << "si prema CTRL + Backspace\n";
-			cout << "Per colorare un pixel, premere spazio, per decolorarlo ";
-			cout << "premere backspace, per cambiarne il colore premere \'C\'\n";
-			cout << "Per spostare il cursore, ";
-			cout << "usare i tasti WASD con Bloc Maiusc attivo\n";
-			cout << "Per digitare un comando, premere \'/\'\n\n";
-			SetConsoleTextAttribute(hConsole, 2);
-			cout << "ATTENZIONE: spostandosi fuori dalla griglia con il cursore, ";
-			cout << "verra' creata una nuova porzione di griglia,\n";
-			cout << "e quella precedente diventera' inaccessibile\n\n";
-			SetConsoleTextAttribute(hConsole, 15);
+				string Input{ word };
+				Input.erase(0, 1);
 
-			// inizio del disegno
-		retry:
-			binaryWord = pasting ?
-				draw(dim, new_dim, ret, enable, false, binaryWord)
-				: draw(dim, new_dim, ret, enable);
-			if (binaryWord.extent() == 0) {
-				SetConsoleTextAttribute(hConsole, 64);
-				cout << "La console e' troppo piccola, errore!\a";
+				// controllo dimensione inserita
+				if (Input.empty()) dim = 1;
+				else if (Input.size() <= 2)
+					dim = is_integer(Input) ? stoi(Input) : 1;
+				else dim = 1;
+
+				// caso di errore
+				if (dim != 3 and dim != 5 and dim != 7
+					and dim != 11 and dim != 13 and dim != 17)
+				{
+					SetConsoleTextAttribute(hConsole, 64);
+					cout << "La dimensione inserita e' sbagliata\a";
+					SetConsoleTextAttribute(hConsole, 15);
+					cout << "\n\n";
+					continue;
+				}
+
+				// notifica di input corretto
+				SetConsoleTextAttribute(hConsole, 4);
+				cout << "Dimensione valida, accesso all'interfaccia di disegno...\n\n";
+				SetConsoleTextAttribute(hConsole, 10);
+				cout << "Per disegnare una lettera da scorciatoia, ";
+				cout << "premere il tasto corrispondente, con Bloc Maiusc non attivo\n";
+				cout << "Per cancellare una lettera da scorciatoia, ";
+				cout << "si prema CTRL + Backspace\n";
+				cout << "Per colorare un pixel, premere spazio, per decolorarlo ";
+				cout << "premere backspace, per cambiarne il colore premere \'C\'\n";
+				cout << "Per spostare il cursore, ";
+				cout << "usare i tasti WASD con Bloc Maiusc attivo\n";
+				cout << "Per digitare un comando, premere \'/\'\n\n";
+				SetConsoleTextAttribute(hConsole, 2);
+				cout << "ATTENZIONE: spostandosi fuori dalla griglia con il cursore, ";
+				cout << "verra' creata una nuova porzione di griglia,\n";
+				cout << "e quella precedente diventera' inaccessibile\n\n";
 				SetConsoleTextAttribute(hConsole, 15);
-				cout << "\n\n";
-				continue;
-			}
-				
-			// è stato incollato qualcosa
-			if (new_dim != -1) {
-				dim = new_dim;
-				new_dim = -1;
-				pasting = true;
-				goto retry;
+
+				// inizio del disegno
+			retry:
+				binaryWord = pasting ?
+					draw(dim, new_dim, ret, enable, false, binaryWord)
+					: draw(dim, new_dim, ret, enable);
+				if (binaryWord.extent() == 0) {
+					SetConsoleTextAttribute(hConsole, 64);
+					cout << "La console e' troppo piccola, errore!\a";
+					SetConsoleTextAttribute(hConsole, 15);
+					cout << "\n\n";
+					continue;
+				}
+
+				// è stato incollato qualcosa
+				if (new_dim != -1) {
+					dim = new_dim;
+					new_dim = -1;
+					pasting = true;
+					goto retry;
+				}
 			}
 
 			// liste
@@ -2143,7 +2185,8 @@ int main()
 		for (const auto& c : word) {
 			vector<vector<bool>>binaryChar{};
 			auto it = charToPixelMap.find(toupper(c));
-			if (it != charToPixelMap.end()) binaryChar = it->second;
+			if (it == charToPixelMap.end()) it = charToPixelMap.find('_');
+			binaryChar = it->second;
 
 			for (int i = 0; i < 5; ++i) {
 				for (bool X : binaryChar[i]) binaryWord.push(i, X);
